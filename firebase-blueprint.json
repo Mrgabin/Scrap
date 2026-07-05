@@ -1,0 +1,88 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile document",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Track": {
+      "title": "Track",
+      "description": "Liked track in user collection",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "artist": { "type": "string" },
+        "album": { "type": "string" },
+        "duration": { "type": "string" },
+        "durationSec": { "type": "number" },
+        "thumbnail": { "type": "string" }
+      },
+      "required": ["id", "title", "artist", "duration", "thumbnail"]
+    },
+    "Playlist": {
+      "title": "Playlist",
+      "description": "Custom playlist created by a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "coverColor": { "type": "string" },
+        "tracks": { "type": "array" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "tracks"]
+    },
+    "HistoryItem": {
+      "title": "HistoryItem",
+      "description": "Listened track in history",
+      "type": "object",
+      "properties": {
+        "track": { "$ref": "Track" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["track", "timestamp"]
+    },
+    "FollowedArtist": {
+      "title": "FollowedArtist",
+      "description": "An artist followed by the user",
+      "type": "object",
+      "properties": {
+        "artistName": { "type": "string" },
+        "followedAt": { "type": "string" }
+      },
+      "required": ["artistName", "followedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Main user document"
+    },
+    "/users/{userId}/likedTracks/{trackId}": {
+      "schema": "Track",
+      "description": "Liked tracks collection"
+    },
+    "/users/{userId}/playlists/{playlistId}": {
+      "schema": "Playlist",
+      "description": "User's custom playlists"
+    },
+    "/users/{userId}/history/{historyId}": {
+      "schema": "HistoryItem",
+      "description": "User's listening history"
+    },
+    "/users/{userId}/followedArtists/{artistId}": {
+      "schema": "FollowedArtist",
+      "description": "User's followed artists list"
+    }
+  }
+}

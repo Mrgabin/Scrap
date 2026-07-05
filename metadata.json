@@ -1,0 +1,6 @@
+{
+  "name": "Scrap",
+  "description": "Un clone visuel et fonctionnel de Spotify propulsé par YouTube Music, avec Authentification Firebase, listes de lecture personnalisées, titres likés et recommandations intelligentes basées sur l'historique d'écoute.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

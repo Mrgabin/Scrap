@@ -2,9 +2,55 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Allow read and write to all documents for seamless development and project transitions
+    // Default-deny catch-all
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && 
+             request.auth.token.email == "ytgabgal@gmail.com" && 
+             request.auth.token.email_verified == true;
+    }
+
+    // Rules for "users" collection and nested sub-collections
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      match /likedTracks/{trackId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /playlists/{playlistId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /history/{historyId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /followedArtists/{artistId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /personalizedPlaylists/{playlistId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // Rules for "mot_de_passe" collection
+    match /mot_de_passe/{userId} {
+      allow read, write: if isOwner(userId);
+      allow read: if isAdmin();
     }
   }
 }

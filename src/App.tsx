@@ -16,7 +16,7 @@ import {
   arrayRemove,
   updateDoc
 } from "firebase/firestore";
-import { auth, db } from "./firebase";
+import { auth, db, handleFirestoreError, OperationType } from "./firebase";
 import { Track, Playlist } from "./types";
 import { CURATED_PLAYLISTS } from "./data/curatedPlaylists";
 
@@ -242,8 +242,8 @@ export default function App() {
 
   // Search History States
   const getSearchHistoryKey = (currentUser: any) => {
-    if (!currentUser) return "spotify_search_history_guest";
-    if (currentUser.isGuest) return "spotify_search_history_guest";
+    if (!currentUser) return null;
+    if (currentUser.isGuest) return null;
     return `spotify_search_history_${currentUser.uid}`;
   };
 
@@ -251,19 +251,17 @@ export default function App() {
 
   useEffect(() => {
     const key = getSearchHistoryKey(user);
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      try {
-        setSearchHistory(JSON.parse(saved));
-        return;
-      } catch (e) {}
+    if (key) {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        try {
+          setSearchHistory(JSON.parse(saved));
+          return;
+        } catch (e) {}
+      }
     }
-    // Registered users start with an empty history. Guests get PRE_POPULATED_HISTORY.
-    if (user && !user.isGuest) {
-      setSearchHistory([]);
-    } else {
-      setSearchHistory(PRE_POPULATED_HISTORY);
-    }
+    // Everyone (including guests) starts with an empty history. No PRE_POPULATED_HISTORY.
+    setSearchHistory([]);
   }, [user?.uid, user?.isGuest]);
 
   const [isSearchHistoryOpen, setIsSearchHistoryOpen] = useState(false);
@@ -289,7 +287,7 @@ export default function App() {
       return;
     }
 
-    if (user.isGuest) {
+    if (user.isGuest || (user.providerData && user.providerData.some((p: any) => p.providerId === "password"))) {
       setIsPasswordVerified(true);
       return;
     }
@@ -315,6 +313,12 @@ export default function App() {
         }
       } catch (err) {
         console.error("Error checking password in Firestore:", err);
+        // Trace and wrap error as required by firebase-integration guidelines
+        try {
+          handleFirestoreError(err, OperationType.GET, "mot_de_passe/" + user.uid);
+        } catch (formattedError) {
+          console.error("Formatted Firestore Error:", formattedError);
+        }
         // Fallback
         setHasPasswordInDb(false);
       } finally {
@@ -323,7 +327,7 @@ export default function App() {
     };
 
     checkPasswordRecord();
-  }, [user?.uid, user?.isGuest]);
+  }, [user?.uid, user?.isGuest, user?.providerData]);
 
   // Algorithmic & Taste Survey States
   const [tasteProfile, setTasteProfile] = useState<any>(null);
@@ -565,44 +569,13 @@ export default function App() {
     if (!user) return;
 
     if (user.isGuest) {
-      // Load followed artists for guest users from localStorage
-      const saved = localStorage.getItem("spotify_followed_artists");
-      if (saved) {
-        try {
-          setFollowedArtists(JSON.parse(saved));
-        } catch (e) {
-          setFollowedArtists([]);
-        }
-      } else {
-        setFollowedArtists([]);
-      }
+      // Guest users start with absolutely clean, non-persisted empty states
+      setFollowedArtists([]);
       setLikedTracks([]);
       setCustomPlaylists([]);
       setRecentTracks([]);
-
-      // Load guest taste profile
-      const savedTaste = localStorage.getItem("scrap_taste_profile");
-      if (savedTaste) {
-        try {
-          setTasteProfile(JSON.parse(savedTaste));
-        } catch (e) {
-          setTasteProfile(null);
-        }
-      } else {
-        setTasteProfile(null);
-      }
-
-      // Load guest personalized mixes
-      const savedPersonalized = localStorage.getItem("scrap_personalized_playlists");
-      if (savedPersonalized) {
-        try {
-          setPersonalizedPlaylists(JSON.parse(savedPersonalized));
-        } catch (e) {
-          setPersonalizedPlaylists([]);
-        }
-      } else {
-        setPersonalizedPlaylists([]);
-      }
+      setTasteProfile(null);
+      setPersonalizedPlaylists([]);
       return;
     }
 
@@ -923,7 +896,7 @@ export default function App() {
     setFollowedArtists(updated);
     
     if (user.isGuest) {
-      localStorage.setItem("spotify_followed_artists", JSON.stringify(updated));
+      // In guest mode, do not persist following state to localStorage (keep in-memory only)
     } else {
       const artistId = artistName.toLowerCase().replace(/[^a-z0-9]/g, "_");
       const docRef = doc(db, "users", user.uid, "followedArtists", artistId);
@@ -1019,7 +992,9 @@ export default function App() {
       const filtered = prevHistory.filter((h) => h.id !== item.id && h.name !== item.name);
       const updated = [item, ...filtered].slice(0, 15);
       const key = getSearchHistoryKey(user);
-      localStorage.setItem(key, JSON.stringify(updated));
+      if (key) {
+        localStorage.setItem(key, JSON.stringify(updated));
+      }
       return updated;
     });
   };
@@ -1028,7 +1003,9 @@ export default function App() {
     setSearchHistory((prevHistory) => {
       const updated = prevHistory.filter((h) => h.id !== id);
       const key = getSearchHistoryKey(user);
-      localStorage.setItem(key, JSON.stringify(updated));
+      if (key) {
+        localStorage.setItem(key, JSON.stringify(updated));
+      }
       return updated;
     });
   };
@@ -1036,7 +1013,9 @@ export default function App() {
   const handleClearHistory = () => {
     setSearchHistory([]);
     const key = getSearchHistoryKey(user);
-    localStorage.setItem(key, JSON.stringify([]));
+    if (key) {
+      localStorage.setItem(key, JSON.stringify([]));
+    }
   };
 
   const handleHistoryItemClick = (item: any) => {
@@ -1338,8 +1317,7 @@ export default function App() {
       const data = await res.json();
       if (data.playlists) {
         if (user.isGuest) {
-          localStorage.setItem("scrap_taste_profile", JSON.stringify(profile));
-          localStorage.setItem("scrap_personalized_playlists", JSON.stringify(data.playlists));
+          // In guest mode, do not persist taste profile or personalized playlists to localStorage (keep in-memory only)
           setTasteProfile(profile);
           setPersonalizedPlaylists(data.playlists);
         } else {
@@ -1380,7 +1358,7 @@ export default function App() {
       const data = await res.json();
       if (data.playlists) {
         if (user.isGuest) {
-          localStorage.setItem("scrap_personalized_playlists", JSON.stringify(data.playlists));
+          // In guest mode, do not persist personalized playlists to localStorage (keep in-memory only)
           setPersonalizedPlaylists(data.playlists);
         } else {
           for (const pl of data.playlists) {
@@ -1441,15 +1419,23 @@ export default function App() {
     return (
       <div className="min-h-screen bg-black flex flex-col justify-center items-center text-white font-sans select-none">
         <div className="w-16 h-16 animate-bounce mb-5 flex items-center justify-center filter drop-shadow-[0_0_12px_rgba(29,185,84,0.4)]">
-          <svg viewBox="0 0 100 100" className="w-full h-full fill-none animate-pulse" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-none animate-pulse" xmlns="http://www.w3.org/2000/svg">
             <defs>
               <linearGradient id="scrap-logo-grad-loading" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" stopColor="#1DB954" />
                 <stop offset="100%" stopColor="#1ed760" />
               </linearGradient>
+              <filter id="loading-glow" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="3" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+              </filter>
             </defs>
             <circle cx="50" cy="50" r="45" fill="#0c0c14" stroke="url(#scrap-logo-grad-loading)" strokeWidth="3" />
-            <path d="M 65 32 C 60 25, 40 25, 35 32 C 30 40, 45 45, 55 50 C 65 55, 70 65, 65 72 C 60 80, 40 80, 35 72" stroke="url(#scrap-logo-grad-loading)" />
+            <path d="M 65 32 C 60 25, 40 25, 35 32 C 30 40, 45 45, 55 50 C 65 55, 70 65, 65 72 C 60 80, 40 80, 35 72" fill="none" stroke="url(#scrap-logo-grad-loading)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" filter="url(#loading-glow)" />
+            <line x1="22" y1="50" x2="28" y2="50" stroke="url(#scrap-logo-grad-loading)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
+            <line x1="72" y1="50" x2="78" y2="50" stroke="url(#scrap-logo-grad-loading)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
+            <line x1="50" y1="18" x2="50" y2="24" stroke="url(#scrap-logo-grad-loading)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
+            <line x1="50" y1="76" x2="50" y2="82" stroke="url(#scrap-logo-grad-loading)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
           </svg>
         </div>
         <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400">
@@ -1493,6 +1479,11 @@ export default function App() {
       } catch (err: any) {
         console.error("Error saving password to Firestore:", err);
         setPasswordError("Une erreur est survenue lors de l'enregistrement de votre mot de passe.");
+        try {
+          handleFirestoreError(err, OperationType.WRITE, "mot_de_passe/" + user.uid);
+        } catch (formattedError) {
+          console.error("Formatted Firestore Error:", formattedError);
+        }
       } finally {
         setPasswordLoading(false);
       }
@@ -1524,15 +1515,23 @@ export default function App() {
           {/* Logo */}
           <div className="flex flex-col items-center mb-8">
             <div className="w-20 h-20 mb-4 filter drop-shadow-[0_4px_16px_rgba(29,185,84,0.3)] hover:scale-105 transition-transform duration-300 flex items-center justify-center">
-              <svg viewBox="0 0 100 100" className="w-full h-full fill-none" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <svg viewBox="0 0 100 100" className="w-full h-full fill-none" xmlns="http://www.w3.org/2000/svg">
                 <defs>
                   <linearGradient id="scrap-logo-grad-pwd" x1="0%" y1="0%" x2="100%" y2="100%">
                     <stop offset="0%" stopColor="#1DB954" />
                     <stop offset="100%" stopColor="#1ed760" />
                   </linearGradient>
+                  <filter id="pwd-glow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur stdDeviation="3" result="blur" />
+                    <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                  </filter>
                 </defs>
                 <circle cx="50" cy="50" r="45" fill="#0c0c14" stroke="url(#scrap-logo-grad-pwd)" strokeWidth="3" />
-                <path d="M 65 32 C 60 25, 40 25, 35 32 C 30 40, 45 45, 55 50 C 65 55, 70 65, 65 72 C 60 80, 40 80, 35 72" stroke="url(#scrap-logo-grad-pwd)" />
+                <path d="M 65 32 C 60 25, 40 25, 35 32 C 30 40, 45 45, 55 50 C 65 55, 70 65, 65 72 C 60 80, 40 80, 35 72" fill="none" stroke="url(#scrap-logo-grad-pwd)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" filter="url(#pwd-glow)" />
+                <line x1="22" y1="50" x2="28" y2="50" stroke="url(#scrap-logo-grad-pwd)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
+                <line x1="72" y1="50" x2="78" y2="50" stroke="url(#scrap-logo-grad-pwd)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
+                <line x1="50" y1="18" x2="50" y2="24" stroke="url(#scrap-logo-grad-pwd)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
+                <line x1="50" y1="76" x2="50" y2="82" stroke="url(#scrap-logo-grad-pwd)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
               </svg>
             </div>
             <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-1">
@@ -1993,7 +1992,6 @@ export default function App() {
                 onUpdateProfile={(dispName, photo) => {
                   if (user.isGuest) {
                     const updated = { ...user, displayName: dispName, photoURL: photo };
-                    localStorage.setItem("spotify_guest_user", JSON.stringify(updated));
                     setUser(updated);
                   }
                 }}
@@ -2005,8 +2003,8 @@ export default function App() {
                 customBackgroundUrl={customBackgroundUrl}
                 onUpdateBackground={async (url) => {
                   setCustomBackgroundUrl(url);
-                  localStorage.setItem("scrap_custom_background_url", url);
                   if (user && !user.isGuest) {
+                    localStorage.setItem("scrap_custom_background_url", url);
                     try {
                       const docRef = doc(db, "users", user.uid);
                       await updateDoc(docRef, { customBackgroundUrl: url });
@@ -2027,7 +2025,6 @@ export default function App() {
                   if (user.isGuest) {
                     const updated = likedTracks.filter(t => t.id !== trackId);
                     setLikedTracks(updated);
-                    localStorage.setItem("spotify_guest_liked", JSON.stringify(updated));
                   } else {
                     await deleteDoc(doc(db, "users", user.uid, "likedTracks", trackId));
                   }

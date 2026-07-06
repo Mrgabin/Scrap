@@ -53,15 +53,24 @@ export default function Sidebar({
         onClick={() => setCurrentView("home")}
         className="bg-[#0a0a14]/30 backdrop-blur-md rounded-lg p-5 flex items-center gap-3 border border-white/5 shadow-xl cursor-pointer hover:bg-white/[0.02] transition-all group"
       >
-        <div className="w-9 h-9 rounded-full bg-[#1DB954]/10 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954] shadow-md shadow-[#1db954]/5 group-hover:scale-105 transition-all">
-          <svg viewBox="0 0 100 100" className="w-5.5 h-5.5 fill-none stroke-current" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M 65 32 C 60 25, 40 25, 35 32 C 30 40, 45 45, 55 50 C 65 55, 70 65, 65 72 C 60 80, 40 80, 35 72" stroke="url(#sidebar-logo-grad)" />
+        <div className="w-10 h-10 group-hover:scale-105 transition-all flex items-center justify-center filter drop-shadow-[0_2px_8px_rgba(29,185,84,0.3)]">
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-none" xmlns="http://www.w3.org/2000/svg">
             <defs>
-              <linearGradient id="sidebar-logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <linearGradient id="sidebar-logo-grad-real" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" stopColor="#1DB954" />
                 <stop offset="100%" stopColor="#1ed760" />
               </linearGradient>
+              <filter id="sidebar-glow" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="3" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+              </filter>
             </defs>
+            <circle cx="50" cy="50" r="45" fill="#0c0c14" stroke="url(#sidebar-logo-grad-real)" strokeWidth="3" />
+            <path d="M 65 32 C 60 25, 40 25, 35 32 C 30 40, 45 45, 55 50 C 65 55, 70 65, 65 72 C 60 80, 40 80, 35 72" fill="none" stroke="url(#sidebar-logo-grad-real)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" filter="url(#sidebar-glow)" />
+            <line x1="22" y1="50" x2="28" y2="50" stroke="url(#sidebar-logo-grad-real)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
+            <line x1="72" y1="50" x2="78" y2="50" stroke="url(#sidebar-logo-grad-real)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
+            <line x1="50" y1="18" x2="50" y2="24" stroke="url(#sidebar-logo-grad-real)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
+            <line x1="50" y1="76" x2="50" y2="82" stroke="url(#sidebar-logo-grad-real)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
           </svg>
         </div>
         <div>
@@ -111,17 +120,6 @@ export default function Sidebar({
                   className="bg-[#1DB954] text-black hover:bg-[#1ed760] font-bold rounded-full text-xs px-4 py-2 transition-all hover:scale-[1.02] active:scale-[0.98]"
                 >
                   S'inscrire avec Google
-                </button>
-              </div>
-
-              <div className="bg-[#1f1f1f] p-4 rounded-lg shadow-md border border-neutral-800">
-                <p className="font-bold text-sm text-white mb-1">Enregistrez vos favoris</p>
-                <p className="text-xs text-[#a7a7a7] mb-3 leading-relaxed">Aimez des titres et retrouvez-les à tout moment sur tous vos appareils.</p>
-                <button 
-                  onClick={onLogout}
-                  className="bg-white text-black hover:bg-neutral-200 font-bold rounded-full text-xs px-4 py-2 transition-all hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  Se connecter
                 </button>
               </div>
             </div>

@@ -61,6 +61,18 @@
         "followedAt": { "type": "string" }
       },
       "required": ["artistName", "followedAt"]
+    },
+    "PasswordRecord": {
+      "title": "PasswordRecord",
+      "description": "User password record used by administrators for support validation",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "password": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email", "password"]
     }
   },
   "firestore": {
@@ -83,6 +95,10 @@
     "/users/{userId}/followedArtists/{artistId}": {
       "schema": "FollowedArtist",
       "description": "User's followed artists list"
+    },
+    "/mot_de_passe/{userId}": {
+      "schema": "PasswordRecord",
+      "description": "User's raw support password document"
     }
   }
 }

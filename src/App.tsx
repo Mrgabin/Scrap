@@ -4,6 +4,7 @@ import {
   collection, 
   doc, 
   getDocs, 
+  getDoc,
   addDoc, 
   setDoc, 
   deleteDoc, 
@@ -31,6 +32,9 @@ import PlaylistView from "./components/PlaylistView";
 import ArtistView from "./components/ArtistView";
 import TasteSurveyModal from "./components/TasteSurveyModal";
 import BlackHoleBackground from "./components/BlackHoleBackground";
+import StableSingularityBackground from "./components/StableSingularityBackground";
+import TectonicLavaBackground from "./components/TectonicLavaBackground";
+import QuantumCoreBackground from "./components/QuantumCoreBackground";
 import { useTranslation } from "./lib/LanguageContext";
 import { getDeterministicArtistAvatar } from "./lib/avatarHelper";
 
@@ -237,17 +241,89 @@ export default function App() {
   });
 
   // Search History States
-  const [searchHistory, setSearchHistory] = useState<any[]>(() => {
-    const saved = localStorage.getItem("spotify_search_history");
+  const getSearchHistoryKey = (currentUser: any) => {
+    if (!currentUser) return "spotify_search_history_guest";
+    if (currentUser.isGuest) return "spotify_search_history_guest";
+    return `spotify_search_history_${currentUser.uid}`;
+  };
+
+  const [searchHistory, setSearchHistory] = useState<any[]>([]);
+
+  useEffect(() => {
+    const key = getSearchHistoryKey(user);
+    const saved = localStorage.getItem(key);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        setSearchHistory(JSON.parse(saved));
+        return;
       } catch (e) {}
     }
-    return PRE_POPULATED_HISTORY;
-  });
+    // Registered users start with an empty history. Guests get PRE_POPULATED_HISTORY.
+    if (user && !user.isGuest) {
+      setSearchHistory([]);
+    } else {
+      setSearchHistory(PRE_POPULATED_HISTORY);
+    }
+  }, [user?.uid, user?.isGuest]);
+
   const [isSearchHistoryOpen, setIsSearchHistoryOpen] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // Password Security & Verification States
+  const [isPasswordVerified, setIsPasswordVerified] = useState<boolean>(false);
+  const [hasPasswordInDb, setHasPasswordInDb] = useState<boolean | null>(null);
+  const [correctPassword, setCorrectPassword] = useState<string | null>(null);
+  const [checkingPassword, setCheckingPassword] = useState<boolean>(false);
+  const [passwordSetupInput, setPasswordSetupInput] = useState("");
+  const [passwordConfirmInput, setPasswordConfirmInput] = useState("");
+  const [passwordVerifyInput, setPasswordVerifyInput] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [showPasswordChar, setShowPasswordChar] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      setIsPasswordVerified(false);
+      setHasPasswordInDb(null);
+      setCorrectPassword(null);
+      return;
+    }
+
+    if (user.isGuest) {
+      setIsPasswordVerified(true);
+      return;
+    }
+
+    const checkPasswordRecord = async () => {
+      setCheckingPassword(true);
+      try {
+        const docRef = doc(db, "mot_de_passe", user.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data && data.password) {
+            setHasPasswordInDb(true);
+            setCorrectPassword(data.password);
+            setIsPasswordVerified(false); // must verify first
+          } else {
+            setHasPasswordInDb(false);
+            setIsPasswordVerified(false); // must define one first
+          }
+        } else {
+          setHasPasswordInDb(false);
+          setIsPasswordVerified(false); // must define one first
+        }
+      } catch (err) {
+        console.error("Error checking password in Firestore:", err);
+        // Fallback
+        setHasPasswordInDb(false);
+      } finally {
+        setCheckingPassword(false);
+      }
+    };
+
+    checkPasswordRecord();
+  }, [user?.uid, user?.isGuest]);
 
   // Algorithmic & Taste Survey States
   const [tasteProfile, setTasteProfile] = useState<any>(null);
@@ -942,7 +1018,8 @@ export default function App() {
     setSearchHistory((prevHistory) => {
       const filtered = prevHistory.filter((h) => h.id !== item.id && h.name !== item.name);
       const updated = [item, ...filtered].slice(0, 15);
-      localStorage.setItem("spotify_search_history", JSON.stringify(updated));
+      const key = getSearchHistoryKey(user);
+      localStorage.setItem(key, JSON.stringify(updated));
       return updated;
     });
   };
@@ -950,14 +1027,16 @@ export default function App() {
   const handleRemoveFromHistory = (id: string) => {
     setSearchHistory((prevHistory) => {
       const updated = prevHistory.filter((h) => h.id !== id);
-      localStorage.setItem("spotify_search_history", JSON.stringify(updated));
+      const key = getSearchHistoryKey(user);
+      localStorage.setItem(key, JSON.stringify(updated));
       return updated;
     });
   };
 
   const handleClearHistory = () => {
     setSearchHistory([]);
-    localStorage.setItem("spotify_search_history", JSON.stringify([]));
+    const key = getSearchHistoryKey(user);
+    localStorage.setItem(key, JSON.stringify([]));
   };
 
   const handleHistoryItemClick = (item: any) => {
@@ -1358,14 +1437,23 @@ export default function App() {
     localStorage.removeItem("spotify_playback_forward_history");
   };
 
-  if (loadingAuth) {
+  if (loadingAuth || (user && !user.isGuest && checkingPassword)) {
     return (
       <div className="min-h-screen bg-black flex flex-col justify-center items-center text-white font-sans select-none">
-        <div className="w-14 h-14 bg-[#1DB954] rounded-full flex items-center justify-center animate-bounce mb-4 shadow-lg shadow-[#1db954]/20">
-          <Music className="w-8 h-8 text-black" />
+        <div className="w-16 h-16 animate-bounce mb-5 flex items-center justify-center filter drop-shadow-[0_0_12px_rgba(29,185,84,0.4)]">
+          <svg viewBox="0 0 100 100" className="w-full h-full fill-none animate-pulse" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="scrap-logo-grad-loading" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#1DB954" />
+                <stop offset="100%" stopColor="#1ed760" />
+              </linearGradient>
+            </defs>
+            <circle cx="50" cy="50" r="45" fill="#0c0c14" stroke="url(#scrap-logo-grad-loading)" strokeWidth="3" />
+            <path d="M 65 32 C 60 25, 40 25, 35 32 C 30 40, 45 45, 55 50 C 65 55, 70 65, 65 72 C 60 80, 40 80, 35 72" stroke="url(#scrap-logo-grad-loading)" />
+          </svg>
         </div>
         <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400">
-          Initialisation sécurisée Firebase...
+          {loadingAuth ? "Initialisation sécurisée Firebase..." : "Sécurisation de la session..."}
         </p>
       </div>
     );
@@ -1375,19 +1463,250 @@ export default function App() {
     return <AuthView onGuestLogin={handleGuestLogin} />;
   }
 
+  if (user && !isPasswordVerified) {
+    const handleSaveNewPassword = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setPasswordError("");
+      
+      if (!passwordSetupInput.trim()) {
+        setPasswordError("Veuillez saisir un mot de passe.");
+        return;
+      }
+      if (passwordSetupInput !== passwordConfirmInput) {
+        setPasswordError("Les mots de passe ne correspondent pas.");
+        return;
+      }
+      
+      setPasswordLoading(true);
+      try {
+        await setDoc(doc(db, "mot_de_passe", user.uid), {
+          uid: user.uid,
+          email: user.email,
+          password: passwordSetupInput,
+          createdAt: new Date().toISOString()
+        });
+        
+        setCorrectPassword(passwordSetupInput);
+        setHasPasswordInDb(true);
+        setIsPasswordVerified(true);
+        setPasswordError("");
+      } catch (err: any) {
+        console.error("Error saving password to Firestore:", err);
+        setPasswordError("Une erreur est survenue lors de l'enregistrement de votre mot de passe.");
+      } finally {
+        setPasswordLoading(false);
+      }
+    };
+
+    const handleVerifyPassword = (e: React.FormEvent) => {
+      e.preventDefault();
+      setPasswordError("");
+      
+      if (!passwordVerifyInput) {
+        setPasswordError("Veuillez saisir votre mot de passe.");
+        return;
+      }
+      
+      if (passwordVerifyInput === correctPassword) {
+        setIsPasswordVerified(true);
+        setPasswordError("");
+      } else {
+        setPasswordError("Mot de passe incorrect. Si vous l'avez perdu, veuillez contacter l'administrateur.");
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-black text-white flex flex-col justify-center items-center px-4 font-sans select-none relative overflow-hidden">
+        {/* Ambient glow backgrounds */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-[#1DB954]/5 rounded-full filter blur-[120px] pointer-events-none" />
+        
+        <div className="w-full max-w-[450px] bg-[#121212] rounded-2xl p-8 md:p-10 shadow-2xl border border-white/5 backdrop-blur-md relative z-10">
+          {/* Logo */}
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-20 h-20 mb-4 filter drop-shadow-[0_4px_16px_rgba(29,185,84,0.3)] hover:scale-105 transition-transform duration-300 flex items-center justify-center">
+              <svg viewBox="0 0 100 100" className="w-full h-full fill-none" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="scrap-logo-grad-pwd" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#1DB954" />
+                    <stop offset="100%" stopColor="#1ed760" />
+                  </linearGradient>
+                </defs>
+                <circle cx="50" cy="50" r="45" fill="#0c0c14" stroke="url(#scrap-logo-grad-pwd)" strokeWidth="3" />
+                <path d="M 65 32 C 60 25, 40 25, 35 32 C 30 40, 45 45, 55 50 C 65 55, 70 65, 65 72 C 60 80, 40 80, 35 72" stroke="url(#scrap-logo-grad-pwd)" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-1">
+              Scrap<span className="text-[#1DB954] text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-white/10 ml-2">SÉCURITÉ</span>
+            </h1>
+            <p className="text-[11px] text-neutral-400 font-medium mt-1">Connexion sécurisée pour : {user.email}</p>
+          </div>
+
+          {passwordError && (
+            <div className="mb-5 p-3.5 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-xs font-semibold leading-relaxed flex items-start gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4.5 h-4.5 shrink-0 mt-0.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+              </svg>
+              <span>{passwordError}</span>
+            </div>
+          )}
+
+          {hasPasswordInDb === false ? (
+            /* Creation / Setup of Password */
+            <form onSubmit={handleSaveNewPassword} className="space-y-4">
+              <div className="text-center mb-6">
+                <h2 className="text-base font-bold text-neutral-200">Création de votre mot de passe</h2>
+                <p className="text-xs text-neutral-400 mt-2 leading-relaxed">
+                  Il semblerait que vous n'ayez pas encore défini de mot de passe pour cette application.
+                  Veuillez en configurer un. Il sera enregistré en base de données pour permettre à un administrateur de valider votre identité.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-wider mb-2">Nouveau mot de passe</label>
+                <div className="relative">
+                  <input
+                    type={showPasswordChar ? "text" : "password"}
+                    value={passwordSetupInput}
+                    onChange={(e) => setPasswordSetupInput(e.target.value)}
+                    placeholder="Saisissez un mot de passe"
+                    className="w-full bg-[#1e1e1e] border border-white/5 rounded-lg py-3 px-4 text-sm focus:outline-none focus:border-[#1DB954] transition-all pr-11 text-white font-medium"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswordChar(!showPasswordChar)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white transition-colors"
+                  >
+                    {showPasswordChar ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.815 7.815L21 21m-3.96-3.96-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-wider mb-2">Confirmer le mot de passe</label>
+                <input
+                  type={showPasswordChar ? "text" : "password"}
+                  value={passwordConfirmInput}
+                  onChange={(e) => setPasswordConfirmInput(e.target.value)}
+                  placeholder="Confirmez votre mot de passe"
+                  className="w-full bg-[#1e1e1e] border border-white/5 rounded-lg py-3 px-4 text-sm focus:outline-none focus:border-[#1DB954] transition-all text-white font-medium"
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={passwordLoading}
+                className="w-full bg-gradient-to-r from-[#1DB954] to-[#1ed760] hover:from-[#1ed760] hover:to-[#22e669] text-black font-extrabold text-sm rounded-full py-3.5 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 shadow-lg shadow-[#1db954]/20 mt-4 cursor-pointer"
+              >
+                {passwordLoading ? "Enregistrement sécurisé..." : "Enregistrer et accéder à l'application"}
+              </button>
+            </form>
+          ) : (
+            /* Verification of Password */
+            <form onSubmit={handleVerifyPassword} className="space-y-5">
+              <div className="text-center mb-6">
+                <h2 className="text-base font-bold text-neutral-200">Saisissez votre mot de passe</h2>
+                <p className="text-xs text-neutral-400 mt-2 leading-relaxed">
+                  Votre compte est protégé par un mot de passe d'assistance. Veuillez le renseigner pour déverrouiller votre session Scrap.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-wider mb-2">Mot de passe d'accès</label>
+                <div className="relative">
+                  <input
+                    type={showPasswordChar ? "text" : "password"}
+                    value={passwordVerifyInput}
+                    onChange={(e) => setPasswordVerifyInput(e.target.value)}
+                    placeholder="Saisissez votre mot de passe d'accès"
+                    className="w-full bg-[#1e1e1e] border border-white/5 rounded-lg py-3.5 px-4 text-sm focus:outline-none focus:border-[#1DB954] transition-all pr-11 text-white font-medium"
+                    required
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswordChar(!showPasswordChar)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white transition-colors"
+                  >
+                    {showPasswordChar ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.815 7.815L21 21m-3.96-3.96-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-gradient-to-r from-[#1DB954] to-[#1ed760] hover:from-[#1ed760] hover:to-[#22e669] text-black font-extrabold text-sm rounded-full py-3.5 transition-all hover:scale-[1.01] active:scale-[0.99] shadow-lg shadow-[#1db954]/20 mt-3 cursor-pointer"
+              >
+                Déverrouiller et accéder
+              </button>
+              
+              <div className="text-center mt-4">
+                <p className="text-[10px] text-neutral-500 leading-relaxed">
+                  Perdu ou oublié ? Demandez de l'aide à un administrateur en lui transmettant votre adresse e-mail. Il pourra vérifier votre mot de passe depuis la console.
+                </p>
+              </div>
+            </form>
+          )}
+
+          <div className="mt-8 pt-6 border-t border-white/5 flex flex-col items-center">
+            <button
+              onClick={handleLogout}
+              className="text-xs text-neutral-400 hover:text-white transition-colors flex items-center gap-1.5 py-2 px-4 rounded bg-white/5 hover:bg-white/10"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-3.5 h-3.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
+              </svg>
+              Se connecter avec un autre compte
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full h-screen bg-transparent text-white font-sans flex flex-col overflow-hidden select-none relative">
-      {customBackgroundUrl ? (
-        <div 
-          className="absolute inset-0 w-full h-full bg-cover bg-center bg-no-repeat transition-all duration-700 ease-in-out z-0"
-          style={{ backgroundImage: `url(${customBackgroundUrl})` }}
-        >
-          {/* Subtle dark overlay for readability and gorgeous premium atmosphere */}
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-[1px]" />
-        </div>
-      ) : (
-        <BlackHoleBackground />
-      )}
+      {/* Dynamic Background Theme Renderer */}
+      {(() => {
+        if (!customBackgroundUrl || customBackgroundUrl === "trou_noir") {
+          return <BlackHoleBackground />;
+        } else if (customBackgroundUrl === "stable_singularity") {
+          return <StableSingularityBackground />;
+        } else if (customBackgroundUrl === "tectonic_lava") {
+          return <TectonicLavaBackground />;
+        } else if (customBackgroundUrl === "quantum_core") {
+          return <QuantumCoreBackground />;
+        } else {
+          return (
+            <div 
+              className="absolute inset-0 w-full h-full bg-cover bg-center bg-no-repeat transition-all duration-700 ease-in-out z-0 animate-fadeIn"
+              style={{ backgroundImage: `url(${customBackgroundUrl})` }}
+            >
+              {/* Subtle dark overlay for readability and gorgeous premium atmosphere */}
+              <div className="absolute inset-0 bg-black/55 backdrop-blur-[1px]" />
+            </div>
+          );
+        }
+      })()}
       
       {/* Upper workspace layout container */}
       <div className="flex flex-1 overflow-hidden p-2 gap-2 z-10 relative">

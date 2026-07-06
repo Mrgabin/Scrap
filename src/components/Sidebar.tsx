@@ -48,6 +48,30 @@ export default function Sidebar({
   return (
     <nav className="w-[280px] shrink-0 flex flex-col gap-2 h-full select-none" id="spotify_sidebar">
       
+      {/* Brand Header with New Logo */}
+      <div 
+        onClick={() => setCurrentView("home")}
+        className="bg-[#0a0a14]/30 backdrop-blur-md rounded-lg p-5 flex items-center gap-3 border border-white/5 shadow-xl cursor-pointer hover:bg-white/[0.02] transition-all group"
+      >
+        <div className="w-9 h-9 rounded-full bg-[#1DB954]/10 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954] shadow-md shadow-[#1db954]/5 group-hover:scale-105 transition-all">
+          <svg viewBox="0 0 100 100" className="w-5.5 h-5.5 fill-none stroke-current" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M 65 32 C 60 25, 40 25, 35 32 C 30 40, 45 45, 55 50 C 65 55, 70 65, 65 72 C 60 80, 40 80, 35 72" stroke="url(#sidebar-logo-grad)" />
+            <defs>
+              <linearGradient id="sidebar-logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#1DB954" />
+                <stop offset="100%" stopColor="#1ed760" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div>
+          <span className="font-black text-lg tracking-tight text-white flex items-center gap-1">
+            Scrap<span className="text-[#1DB954] text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-white/10 ml-1">APP</span>
+          </span>
+          <p className="text-[10px] text-neutral-400 font-medium">Lecteur audio intelligent</p>
+        </div>
+      </div>
+
       {/* Library, Playlists, Saved Songs */}
       <div className="bg-[#0a0a14]/30 backdrop-blur-md rounded-lg flex-1 flex flex-col overflow-hidden border border-white/5 shadow-xl">
         

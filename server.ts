@@ -618,7 +618,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
       }
     }
   } catch (error) {
-    console.error(`Error scraping channel for artist "${artistName}":`, error);
+    console.warn(`Note: Error scraping channel for artist "${artistName}":`, error?.message || error);
   }
 
   // Ensure full protocol URL

@@ -258,71 +258,196 @@ export default function SettingsView({
             </button>
           </form>
 
-          {/* New Custom Background Image section */}
-          <div className="border-t border-[#282828] pt-5 mt-2 flex flex-col gap-3">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider mb-2 text-[#b3b3b3] flex items-center gap-1.5">
-                <ImageIcon className="w-3.5 h-3.5 text-[#1DB954]" /> URL de l'Arrière-plan personnalisé
-              </label>
-              <input
-                id="custom_bg_input"
-                type="text"
-                placeholder="https://images.unsplash.com/... (lien d'image)"
-                value={bgUrl}
-                onChange={(e) => setBgUrl(e.target.value)}
-                className="w-full bg-[#2a2a2a] hover:bg-[#3a3a3a] focus:bg-[#2a2a2a] border border-transparent focus:border-white/40 rounded px-3 py-2.5 text-sm transition-all outline-none font-mono text-xs"
-              />
-              <p className="text-[10px] text-[#b3b3b3] mt-1.5 leading-relaxed">
-                Entrez l'adresse de n'importe quelle image sur le web (ex: Unsplash, Pinterest, Google Images). Elle remplacera l'effet 3D de trou noir par défaut.
-              </p>
-            </div>
-            
-            <div className="flex flex-wrap gap-2 mt-1">
+          {/* Section Thème d'arrière-plan */}
+          <div className="border-t border-[#282828] pt-5 mt-2 flex flex-col gap-4">
+            <label className="block text-xs font-bold uppercase tracking-wider text-[#b3b3b3] flex items-center gap-1.5">
+              <ImageIcon className="w-4 h-4 text-[#1DB954]" /> Personnaliser l'Arrière-plan
+            </label>
+
+            {/* Selection Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+              {/* Option 1: Black Hole */}
               <button
                 type="button"
                 onClick={async () => {
+                  setBgUrl("trou_noir");
                   if (onUpdateBackground) {
                     try {
                       setLoading(true);
-                      await onUpdateBackground(bgUrl.trim());
-                      setMessage({ type: "success", text: "Arrière-plan personnalisé mis à jour avec succès !" });
+                      await onUpdateBackground("trou_noir");
+                      setMessage({ type: "success", text: "Thème Trou Noir activé !" });
                     } catch (err: any) {
-                      setMessage({ type: "error", text: err.message || "Erreur lors de la mise à jour." });
+                      setMessage({ type: "error", text: "Erreur de changement de thème." });
                     } finally {
                       setLoading(false);
                     }
                   }
                 }}
-                disabled={loading}
-                className="bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold text-xs px-4 py-2 rounded-full flex items-center justify-center gap-1.5 transition-transform hover:scale-105 cursor-pointer disabled:opacity-50"
+                className={`relative flex flex-col items-center justify-center p-4 rounded-xl border text-center transition-all cursor-pointer bg-[#1e1e1e] ${
+                  bgUrl === "trou_noir" || bgUrl === "" 
+                    ? "border-[#1DB954] shadow-[0_0_12px_rgba(29,185,84,0.15)]" 
+                    : "border-[#282828] hover:border-white/20"
+                }`}
               >
-                <Save className="w-3.5 h-3.5" /> Appliquer l'Arrière-plan
+                <div className="w-10 h-10 rounded-full bg-black border-2 border-orange-500/30 flex items-center justify-center shadow-[0_0_10px_rgba(249,115,22,0.2)] mb-2">
+                  <div className="w-6 h-6 rounded-full bg-black shadow-inner" />
+                </div>
+                <span className="text-xs font-bold text-white">Trou Noir (3D)</span>
+                <span className="text-[9px] text-[#b3b3b3] mt-1">Espace infini</span>
               </button>
-              
-              {bgUrl && (
-                <button
-                  type="button"
-                  onClick={async () => {
+
+              {/* Option 2: Stable Singularity */}
+              <button
+                type="button"
+                onClick={async () => {
+                  setBgUrl("stable_singularity");
+                  if (onUpdateBackground) {
                     try {
                       setLoading(true);
-                      setBgUrl("");
-                      if (onUpdateBackground) {
-                        await onUpdateBackground("");
-                      }
-                      setMessage({ type: "success", text: "Arrière-plan réinitialisé (effet trou noir actif)." });
+                      await onUpdateBackground("stable_singularity");
+                      setMessage({ type: "success", text: "Thème Singularité Stable activé !" });
                     } catch (err: any) {
-                      setMessage({ type: "error", text: err.message || "Erreur de réinitialisation." });
+                      setMessage({ type: "error", text: "Erreur de changement de thème." });
                     } finally {
                       setLoading(false);
                     }
-                  }}
-                  disabled={loading}
-                  className="bg-[#2a2a2a] hover:bg-[#3a3a3a] text-white font-bold text-xs px-4 py-2 rounded-full transition-transform hover:scale-105 cursor-pointer disabled:opacity-50"
-                >
-                  Réinitialiser
-                </button>
-              )}
+                  }
+                }}
+                className={`relative flex flex-col items-center justify-center p-4 rounded-xl border text-center transition-all cursor-pointer bg-[#1e1e1e] ${
+                  bgUrl === "stable_singularity" 
+                    ? "border-[#1DB954] shadow-[0_0_12px_rgba(29,185,84,0.15)]" 
+                    : "border-[#282828] hover:border-white/20"
+                }`}
+              >
+                <div className="w-10 h-10 rounded-full bg-slate-900 border-2 border-[#00f3ff]/40 flex items-center justify-center shadow-[0_0_10px_rgba(0,243,255,0.3)] mb-2">
+                  <div className="w-5 h-5 rounded-full bg-[#00f3ff]/10 animate-pulse" />
+                </div>
+                <span className="text-xs font-bold text-white">Singularité Stable (3D)</span>
+                <span className="text-[9px] text-[#b3b3b3] mt-1">Thème Relativiste</span>
+              </button>
+
+              {/* Option 3: Tectonic Lava */}
+              <button
+                type="button"
+                onClick={async () => {
+                  setBgUrl("tectonic_lava");
+                  if (onUpdateBackground) {
+                    try {
+                      setLoading(true);
+                      await onUpdateBackground("tectonic_lava");
+                      setMessage({ type: "success", text: "Thème Fissure de Lave activé !" });
+                    } catch (err: any) {
+                      setMessage({ type: "error", text: "Erreur de changement de thème." });
+                    } finally {
+                      setLoading(false);
+                    }
+                  }
+                }}
+                className={`relative flex flex-col items-center justify-center p-4 rounded-xl border text-center transition-all cursor-pointer bg-[#1e1e1e] ${
+                  bgUrl === "tectonic_lava" 
+                    ? "border-[#1DB954] shadow-[0_0_12px_rgba(29,185,84,0.15)]" 
+                    : "border-[#282828] hover:border-white/20"
+                }`}
+              >
+                <div className="w-10 h-10 rounded-full bg-red-950 border-2 border-red-500/50 flex items-center justify-center shadow-[0_0_10px_rgba(239,68,68,0.3)] mb-2">
+                  <div className="w-5 h-5 rounded-full bg-orange-600/30 animate-pulse" />
+                </div>
+                <span className="text-xs font-bold text-white">Fissures de Lave (3D)</span>
+                <span className="text-[9px] text-[#b3b3b3] mt-1">Thème Tectonique</span>
+              </button>
+
+              {/* Option 4: Quantum Core */}
+              <button
+                type="button"
+                onClick={async () => {
+                  setBgUrl("quantum_core");
+                  if (onUpdateBackground) {
+                    try {
+                      setLoading(true);
+                      await onUpdateBackground("quantum_core");
+                      setMessage({ type: "success", text: "Thème Quantum Core (Aether) activé !" });
+                    } catch (err: any) {
+                      setMessage({ type: "error", text: "Erreur de changement de thème." });
+                    } finally {
+                      setLoading(false);
+                    }
+                  }
+                }}
+                className={`relative flex flex-col items-center justify-center p-4 rounded-xl border text-center transition-all cursor-pointer bg-[#1e1e1e] ${
+                  bgUrl === "quantum_core" 
+                    ? "border-[#1DB954] shadow-[0_0_12px_rgba(29,185,84,0.15)]" 
+                    : "border-[#282828] hover:border-white/20"
+                }`}
+              >
+                <div className="w-10 h-10 rounded-full bg-indigo-950 border-2 border-cyan-400/50 flex items-center justify-center shadow-[0_0_10px_rgba(6,182,212,0.3)] mb-2">
+                  <div className="w-4 h-4 rounded-full bg-[#00f3ff] animate-ping" style={{ animationDuration: '3s' }} />
+                </div>
+                <span className="text-xs font-bold text-white">Quantum Core (3D)</span>
+                <span className="text-[9px] text-[#b3b3b3] mt-1">Simulation Optique</span>
+              </button>
+
+              {/* Option 5: Image URL Option */}
+              <button
+                type="button"
+                onClick={() => {
+                  // Switch to image mode: prompt/allow url editing. If it is already a URL, keep it. Otherwise make it empty or Unsplash default.
+                  if (bgUrl === "trou_noir" || bgUrl === "stable_singularity" || bgUrl === "tectonic_lava" || bgUrl === "quantum_core" || bgUrl === "") {
+                    setBgUrl("https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?q=80&w=2340&auto=format&fit=crop");
+                  }
+                }}
+                className={`relative flex flex-col items-center justify-center p-4 rounded-xl border text-center transition-all cursor-pointer bg-[#1e1e1e] ${
+                  bgUrl !== "trou_noir" && bgUrl !== "stable_singularity" && bgUrl !== "tectonic_lava" && bgUrl !== "quantum_core" && bgUrl !== ""
+                    ? "border-[#1DB954] shadow-[0_0_12px_rgba(29,185,84,0.15)]" 
+                    : "border-[#282828] hover:border-white/20"
+                }`}
+              >
+                <div className="w-10 h-10 rounded-full bg-neutral-800 border-2 border-white/10 flex items-center justify-center mb-2">
+                  <ImageIcon className="w-5 h-5 text-neutral-400" />
+                </div>
+                <span className="text-xs font-bold text-white">Image Personnalisée</span>
+                <span className="text-[9px] text-[#b3b3b3] mt-1">Lien d'image web</span>
+              </button>
             </div>
+
+            {/* Custom URL Input Field (Visible if we selected Option 5) */}
+            {bgUrl !== "trou_noir" && bgUrl !== "stable_singularity" && bgUrl !== "tectonic_lava" && bgUrl !== "quantum_core" && bgUrl !== "" && (
+              <div className="flex flex-col gap-2 mt-2 bg-black/30 p-3 rounded-lg border border-[#282828] animate-fadeIn">
+                <span className="text-xs font-semibold text-neutral-300">URL du lien de l'image :</span>
+                <input
+                  id="custom_bg_input"
+                  type="text"
+                  placeholder="https://images.unsplash.com/... (lien direct d'image)"
+                  value={bgUrl}
+                  onChange={(e) => setBgUrl(e.target.value)}
+                  className="w-full bg-[#2a2a2a] hover:bg-[#3a3a3a] focus:bg-[#2a2a2a] border border-transparent focus:border-white/40 rounded px-3 py-2 text-xs transition-all outline-none font-mono"
+                />
+                <p className="text-[10px] text-[#b3b3b3] leading-relaxed">
+                  Entrez l'adresse de n'importe quelle image sur le web (Pinterest, Google Images, Unsplash). L'image se recadrera automatiquement à la taille de votre fenêtre web !
+                </p>
+                <div className="flex gap-2 mt-1">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (onUpdateBackground) {
+                        try {
+                          setLoading(true);
+                          await onUpdateBackground(bgUrl.trim());
+                          setMessage({ type: "success", text: "Image d'arrière-plan personnalisée appliquée !" });
+                        } catch (err: any) {
+                          setMessage({ type: "error", text: "Erreur de mise à jour." });
+                        } finally {
+                          setLoading(false);
+                        }
+                      }
+                    }}
+                    disabled={loading}
+                    className="bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold text-xs px-4 py-1.5 rounded-full flex items-center justify-center gap-1.5 transition-transform hover:scale-105 cursor-pointer disabled:opacity-50"
+                  >
+                    <Save className="w-3.5 h-3.5" /> Appliquer l'image
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

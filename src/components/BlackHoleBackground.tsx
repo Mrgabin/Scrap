@@ -386,7 +386,20 @@ export default function BlackHoleBackground() {
     scene.add(accretionDisk);
 
     // 10. Animation Loop
-    const clock = new THREE.Clock();
+    class CustomClock {
+      private startTime = performance.now();
+      private oldTime = performance.now();
+      getElapsedTime() {
+        return (performance.now() - this.startTime) / 1000;
+      }
+      getDelta() {
+        const newTime = performance.now();
+        const delta = (newTime - this.oldTime) / 1000;
+        this.oldTime = newTime;
+        return delta;
+      }
+    }
+    const clock = new CustomClock();
     const blackHoleScreenPosVec3 = new THREE.Vector3();
     let animationFrameId: number;
 

@@ -247,6 +247,9 @@ export default function ArtistView({
 
       if (active) {
         const finalProfile = fetchedProfile || cached?.profileData || initialProfile;
+        if (finalProfile && !finalProfile.avatarUrl) {
+          finalProfile.avatarUrl = getDeterministicArtistAvatar(artistName);
+        }
         const finalTracks = fetchedTracks.length > 0 ? fetchedTracks : (cached?.topTracks || localTracks);
 
         // Update the client-side cache
@@ -287,8 +290,11 @@ export default function ArtistView({
   }, [artistName]);
 
   // Fetch album tracks on selectedAlbum change
+  const selectedAlbumId = selectedAlbum?.id;
+  const selectedAlbumTitle = selectedAlbum?.title;
+
   useEffect(() => {
-    if (!selectedAlbum) {
+    if (!selectedAlbumId) {
       setAlbumTracks([]);
       return;
     }
@@ -298,8 +304,8 @@ export default function ArtistView({
       setLoadingAlbumTracks(true);
       try {
         const response = await fetch(
-          `/api/album-tracks?albumId=${selectedAlbum.id}&albumTitle=${encodeURIComponent(
-            selectedAlbum.title
+          `/api/album-tracks?albumId=${selectedAlbumId}&albumTitle=${encodeURIComponent(
+            selectedAlbumTitle || ""
           )}&artistName=${encodeURIComponent(artistName)}`
         );
         if (response.ok && active) {
@@ -311,14 +317,14 @@ export default function ArtistView({
             // Dynamically update the track count in the main albums list so they are 100% exact!
             setAlbums(prevAlbums => 
               prevAlbums.map(alb => 
-                alb.id === selectedAlbum.id 
+                alb.id === selectedAlbumId 
                   ? { ...alb, tracksCount: count } 
                   : alb
               )
             );
 
             // Update selectedAlbum's trackCount as well so the modal displays the exact count
-            setSelectedAlbum(prev => prev ? { ...prev, tracksCount: count } : null);
+            setSelectedAlbum(prev => prev && prev.id === selectedAlbumId ? { ...prev, tracksCount: count } : prev);
           }
         }
       } catch (err) {
@@ -333,23 +339,13 @@ export default function ArtistView({
     return () => {
       active = false;
     };
-  }, [selectedAlbum, artistName]);
+  }, [selectedAlbumId, selectedAlbumTitle, artistName]);
 
   const handlePlayArtistPopular = () => {
     if (topTracks.length > 0) {
       onPlayTrack(topTracks[0], topTracks);
     }
   };
-
-  const similarArtists = [
-    "Daft Punk",
-    "Tame Impala",
-    "The Weeknd",
-    "Justice",
-    "M83",
-    "Kavinsky",
-    "Phoenix"
-  ].filter(name => name.toLowerCase() !== artistName.toLowerCase()).slice(0, 4);
 
   const mockAlbums = [
     { title: "Live at Wembley (Chronicles)", year: "2024", tracks: "14 titres" },
@@ -460,27 +456,8 @@ export default function ArtistView({
 
           {/* 4. Similar Artists & About Panel */}
           <div>
-            <h3 className="text-2xl font-bold mb-4">{t("artist.fans_like")}</h3>
-            <div className="flex flex-col gap-4">
-              {similarArtists.map((name) => (
-                <div 
-                  key={name}
-                  onClick={() => onSelectArtist(name)}
-                  className="p-3 bg-[#181818] hover:bg-[#282828] border border-neutral-900 rounded-xl flex items-center gap-4 cursor-pointer transition-all hover:-translate-y-0.5"
-                >
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-orange-500 to-indigo-500 flex items-center justify-center font-bold text-white shadow-md shrink-0">
-                    {name.substring(0, 1)}
-                  </div>
-                  <div className="overflow-hidden">
-                    <p className="font-bold text-sm text-white truncate">{name}</p>
-                    <p className="text-xs text-[#b3b3b3]">{t("artist.similar")}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
             {/* Micro About Bio & Real Stats */}
-            <div className="mt-8 bg-gradient-to-br from-[#121212] to-[#1a1a1a] p-5 rounded-xl border border-neutral-900 relative overflow-hidden group flex flex-col gap-4">
+            <div className="bg-gradient-to-br from-[#121212] to-[#1a1a1a] p-5 rounded-xl border border-neutral-900 relative overflow-hidden group flex flex-col gap-4">
               <div className="relative z-10">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-[#1DB954] mb-2 flex items-center gap-1">
                   <Sparkles className="w-3 h-3" /> {t("artist.about")}
@@ -542,7 +519,7 @@ export default function ArtistView({
       )}
 
       {/* 5. Chronological Albums Row */}
-      {!loading && (
+      {!loading && (loadingAlbums || (albums && albums.length > 0)) && (
         <div className="mt-12 px-6 md:px-8 mb-8" id="artist_albums_row">
           <h3 className="text-2xl font-bold mb-4">{t("artist.discography")}</h3>
           {loadingAlbums ? (
@@ -550,7 +527,7 @@ export default function ArtistView({
               <div className="w-5 h-5 border-2 border-[#1DB954] border-t-transparent rounded-full animate-spin"></div>
               <span className="text-xs font-mono">Chargement des albums...</span>
             </div>
-          ) : albums.length > 0 ? (
+          ) : (
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-5">
               {albums.map((album) => (
                 <div 
@@ -573,8 +550,6 @@ export default function ArtistView({
                 </div>
               ))}
             </div>
-          ) : (
-            <p className="text-sm text-neutral-500">Aucun album trouvé.</p>
           )}
         </div>
       )}

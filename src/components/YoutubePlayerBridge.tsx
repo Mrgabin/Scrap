@@ -63,7 +63,7 @@ export default function YoutubePlayerBridge({
 
   // Robust initialization of YouTube IFrame Player API
   useEffect(() => {
-    if (!currentTrack) return;
+    if (!currentTrack || currentTrack.id.startsWith("resolve:")) return;
 
     if (playerRef.current) return; // Already initialized
 
@@ -237,6 +237,7 @@ export default function YoutubePlayerBridge({
     if (!isReadyRef.current || !playerRef.current) return;
 
     if (currentTrack) {
+      if (currentTrack.id.startsWith("resolve:")) return;
       try {
         const iframe = playerRef.current.getIframe?.();
         if (iframe) {
@@ -272,7 +273,7 @@ export default function YoutubePlayerBridge({
   // Sync forced playTrigger (forces instant restart/replay of the same track when clicked again)
   useEffect(() => {
     if (!isReadyRef.current || !playerRef.current) return;
-    if (playTrigger > 0 && currentTrack) {
+    if (playTrigger > 0 && currentTrack && !currentTrack.id.startsWith("resolve:")) {
       try {
         const iframe = playerRef.current.getIframe?.();
         if (iframe) {

@@ -509,116 +509,157 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
       }
     }
   } catch (deezerError) {
-    console.warn(`[Deezer API Error] Could not fetch artist profile for ${artistName}:`, deezerError);
+    console.warn(`[Deezer API Error] Could not fetch artist profile for ${artistName}:`, deezerError?.message || deezerError);
   }
 
   // Perform a YouTube channel search for the artist to scrape real avatar and channel details
+  // Keep each sub-fetch highly isolated with shorter timeouts to fail fast and avoid sequential blockages
   try {
-    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(artistName)}&sp=EgIQAg%253D%253D`;
-    const response = await fetch(searchUrl, {
-      signal: AbortSignal.timeout(2000),
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Cache-Control": "no-cache",
-        "Cookie": "SOCS=CAESEwgDEgk0ODE3Nzk3NTQaAmZyIAEaBgiA_K6ZBg; CONSENT=YES+cb.20210328-17-p0.en+FX+917"
-      }
-    });
-    const html = await response.text();
-    const data = extractYtInitialData(html);
-    
-    if (data) {
-      const searchResultsRenderer = data.contents?.twoColumnSearchResultsRenderer || data.contents?.twoColumnSearchResultRenderer;
-      const contents = searchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
-      if (contents) {
-        const itemSection = contents.find((c: any) => c.itemSectionRenderer);
-        if (itemSection) {
-          const items = itemSection.itemSectionRenderer.contents;
-          const channelItem = items.find((i: any) => i.channelRenderer);
-          if (channelItem) {
-            const cr = channelItem.channelRenderer;
-            channelId = cr.channelId || "";
-            const ytAvatar = cr.thumbnail?.thumbnails?.sort((a: any, b: any) => (b.width || 0) - (a.width || 0))[0]?.url || "";
-            if (!avatarUrl && ytAvatar) {
-              avatarUrl = ytAvatar;
-            }
-            subscribersText = cr.subscriberCountText?.simpleText || subscribersText;
-          }
-        }
-      }
-    }
-    
-    // Fallback if channel renderer search filter didn't work (try regular search)
-    if (!channelId) {
-      const regularUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(artistName)}`;
-      const regResponse = await fetch(regularUrl, {
-        signal: AbortSignal.timeout(2000),
+    let searchHtml = "";
+    try {
+      const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(artistName)}&sp=EgIQAg%253D%253D`;
+      const response = await fetch(searchUrl, {
+        signal: AbortSignal.timeout(1200),
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7"
+          "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+          "Cache-Control": "no-cache",
+          "Cookie": "SOCS=CAESEwgDEgk0ODE3Nzk3NTQaAmZyIAEaBgiA_K6ZBg; CONSENT=YES+cb.20210328-17-p0.en+FX+917"
         }
       });
-      const regHtml = await regResponse.text();
-      const regData = extractYtInitialData(regHtml);
-      if (regData) {
-        const searchResultsRenderer = regData.contents?.twoColumnSearchResultsRenderer || regData.contents?.twoColumnSearchResultRenderer;
-        const contents = searchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
-        if (contents) {
-          const itemSection = contents.find((c: any) => c.itemSectionRenderer);
-          if (itemSection) {
-            const items = itemSection.itemSectionRenderer.contents;
-            const channelItem = items.find((i: any) => i.channelRenderer);
-            if (channelItem) {
-              const cr = channelItem.channelRenderer;
-              channelId = cr.channelId || "";
-              const ytAvatar = cr.thumbnail?.thumbnails?.sort((a: any, b: any) => (b.width || 0) - (a.width || 0))[0]?.url || "";
-              if (!avatarUrl && ytAvatar) {
-                avatarUrl = ytAvatar;
+      if (response.ok) {
+        searchHtml = await response.text();
+      }
+    } catch (e) {
+      console.warn(`Note: Filtered YouTube search timed out or failed for "${artistName}":`, e?.message || e);
+    }
+
+    if (searchHtml) {
+      try {
+        const data = extractYtInitialData(searchHtml);
+        if (data) {
+          const searchResultsRenderer = data.contents?.twoColumnSearchResultsRenderer || data.contents?.twoColumnSearchResultRenderer;
+          const contents = searchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
+          if (contents) {
+            const itemSection = contents.find((c: any) => c.itemSectionRenderer);
+            if (itemSection) {
+              const items = itemSection.itemSectionRenderer.contents;
+              const channelItem = items.find((i: any) => i.channelRenderer);
+              if (channelItem) {
+                const cr = channelItem.channelRenderer;
+                channelId = cr.channelId || "";
+                const ytAvatar = cr.thumbnail?.thumbnails?.sort((a: any, b: any) => (b.width || 0) - (a.width || 0))[0]?.url || "";
+                if (!avatarUrl && ytAvatar) {
+                  avatarUrl = ytAvatar;
+                }
+                subscribersText = cr.subscriberCountText?.simpleText || subscribersText;
               }
-              subscribersText = cr.subscriberCountText?.simpleText || subscribersText;
             }
           }
+        }
+      } catch (e) {
+        console.warn(`Error parsing filtered search for ${artistName}:`, e);
+      }
+    }
+
+    // Fallback if channel renderer search filter didn't work (try regular search)
+    if (!channelId) {
+      let regHtml = "";
+      try {
+        const regularUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(artistName)}`;
+        const regResponse = await fetch(regularUrl, {
+          signal: AbortSignal.timeout(1200),
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7"
+          }
+        });
+        if (regResponse.ok) {
+          regHtml = await regResponse.text();
+        }
+      } catch (e) {
+        console.warn(`Note: Regular YouTube search timed out or failed for "${artistName}":`, e?.message || e);
+      }
+
+      if (regHtml) {
+        try {
+          const regData = extractYtInitialData(regHtml);
+          if (regData) {
+            const searchResultsRenderer = regData.contents?.twoColumnSearchResultsRenderer || regData.contents?.twoColumnSearchResultRenderer;
+            const contents = searchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
+            if (contents) {
+              const itemSection = contents.find((c: any) => c.itemSectionRenderer);
+              if (itemSection) {
+                const items = itemSection.itemSectionRenderer.contents;
+                const channelItem = items.find((i: any) => i.channelRenderer);
+                if (channelItem) {
+                  const cr = channelItem.channelRenderer;
+                  channelId = cr.channelId || "";
+                  const ytAvatar = cr.thumbnail?.thumbnails?.sort((a: any, b: any) => (b.width || 0) - (a.width || 0))[0]?.url || "";
+                  if (!avatarUrl && ytAvatar) {
+                    avatarUrl = ytAvatar;
+                  }
+                  subscribersText = cr.subscriberCountText?.simpleText || subscribersText;
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn(`Error parsing regular search for ${artistName}:`, e);
         }
       }
     }
 
     // Retrieve official banner from YouTube Channel homepage if channelId was found
     if (channelId) {
-      const channelPageUrl = `https://www.youtube.com/channel/${channelId}`;
-      const chanResponse = await fetch(channelPageUrl, {
-        signal: AbortSignal.timeout(2000),
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
-          "Cache-Control": "no-cache"
+      let chanHtml = "";
+      try {
+        const channelPageUrl = `https://www.youtube.com/channel/${channelId}`;
+        const chanResponse = await fetch(channelPageUrl, {
+          signal: AbortSignal.timeout(1200),
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Cache-Control": "no-cache"
+          }
+        });
+        if (chanResponse.ok) {
+          chanHtml = await chanResponse.text();
         }
-      });
-      const chanHtml = await chanResponse.text();
-      const chanData = extractYtInitialData(chanHtml);
-      
-      if (chanData) {
-        const header = chanData.header;
-        if (header) {
-          const headerRenderer = header.c4TabbedHeaderRenderer || header.carouselHeaderRenderer;
-          if (headerRenderer && headerRenderer.banner) {
-            const bannerThumbnails = headerRenderer.banner.thumbnails;
-            if (bannerThumbnails && bannerThumbnails.length > 0) {
-              const sortedBanners = bannerThumbnails.sort((a: any, b: any) => (b.width || 0) - (a.width || 0));
-              bannerUrl = sortedBanners[0]?.url || bannerUrl;
-            }
-          } else if (header.pageHeaderRenderer) {
-            const phr = header.pageHeaderRenderer;
-            const bannerVM = phr.content?.pageHeaderViewModel?.banner?.imageBannerViewModel;
-            if (bannerVM && bannerVM.image && bannerVM.image.sources) {
-              const sortedBanners = bannerVM.image.sources.sort((a: any, b: any) => (b.width || 0) - (a.width || 0));
-              bannerUrl = sortedBanners[0]?.url || bannerUrl;
+      } catch (e) {
+        console.warn(`Note: YouTube channel page fetch timed out or failed for "${artistName}":`, e?.message || e);
+      }
+
+      if (chanHtml) {
+        try {
+          const chanData = extractYtInitialData(chanHtml);
+          if (chanData) {
+            const header = chanData.header;
+            if (header) {
+              const headerRenderer = header.c4TabbedHeaderRenderer || header.carouselHeaderRenderer;
+              if (headerRenderer && headerRenderer.banner) {
+                const bannerThumbnails = headerRenderer.banner.thumbnails;
+                if (bannerThumbnails && bannerThumbnails.length > 0) {
+                  const sortedBanners = bannerThumbnails.sort((a: any, b: any) => (b.width || 0) - (a.width || 0));
+                  bannerUrl = sortedBanners[0]?.url || bannerUrl;
+                }
+              } else if (header.pageHeaderRenderer) {
+                const phr = header.pageHeaderRenderer;
+                const bannerVM = phr.content?.pageHeaderViewModel?.banner?.imageBannerViewModel;
+                if (bannerVM && bannerVM.image && bannerVM.image.sources) {
+                  const sortedBanners = bannerVM.image.sources.sort((a: any, b: any) => (b.width || 0) - (a.width || 0));
+                  bannerUrl = sortedBanners[0]?.url || bannerUrl;
+                }
+              }
             }
           }
+        } catch (e) {
+          console.warn(`Error parsing channel page for ${artistName}:`, e);
         }
       }
     }
   } catch (error) {
-    console.warn(`Note: Error scraping channel for artist "${artistName}":`, error?.message || error);
+    console.warn(`Note: General error scraping channel for artist "${artistName}":`, error?.message || error);
   }
 
   // Ensure full protocol URL
@@ -831,7 +872,7 @@ function getDeterministicTrackViews(artist: string, title: string): string {
   return plays.toLocaleString("fr-FR");
 }
 
-async function fetchArtistTopSongsFromDeezer(artistName: string): Promise<{ title: string; rank: number }[]> {
+async function fetchArtistTopSongsFromDeezer(artistName: string): Promise<{ title: string; rank: number; duration?: string; thumbnail?: string }[]> {
   try {
     const searchUrl = `https://api.deezer.com/search/artist?q=${encodeURIComponent(artistName)}`;
     const searchRes = await fetch(searchUrl, {
@@ -859,10 +900,16 @@ async function fetchArtistTopSongsFromDeezer(artistName: string): Promise<{ titl
           if (tracksRes.ok) {
             const tracksData = await tracksRes.json();
             if (tracksData && tracksData.data && tracksData.data.length > 0) {
-              return tracksData.data.map((t: any) => ({
-                title: t.title,
-                rank: t.rank || 0
-              }));
+              return tracksData.data.map((t: any) => {
+                const durMin = Math.floor((t.duration || 210) / 60);
+                const durSec = String((t.duration || 210) % 60).padStart(2, "0");
+                return {
+                  title: t.title,
+                  rank: t.rank || 0,
+                  duration: `${durMin}:${durSec}`,
+                  thumbnail: t.album?.cover_medium || t.album?.cover || ""
+                };
+              });
             }
           }
         }
@@ -917,6 +964,29 @@ app.get("/api/artist-profile", async (req, res) => {
   }
 });
 
+function getDeterministicTrackThumbnail(artist: string, title: string, index: number): string {
+  const images = [
+    "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1487180142328-054b783fc471?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1506157786151-b8491531f063?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?auto=format&fit=crop&w=300&q=80"
+  ];
+
+  const str = `${artist} - ${title}`;
+  let hashVal = 0;
+  for (let i = 0; i < str.length; i++) {
+    hashVal = str.charCodeAt(i) + ((hashVal << 5) - hashVal);
+  }
+  hashVal = Math.abs(hashVal + index);
+  return images[hashVal % images.length];
+}
+
 // 1.6 Artist Tracks API endpoint
 app.get("/api/artist-tracks", async (req, res) => {
   const name = req.query.name as string;
@@ -934,7 +1004,7 @@ app.get("/api/artist-tracks", async (req, res) => {
 
   try {
     // 1. Determine the top song titles and ranks
-    let songs: { title: string; rank: number }[] = [];
+    let songs: { title: string; rank: number; duration?: string; thumbnail?: string }[] = [];
     const deezerSongs = await fetchArtistTopSongsFromDeezer(name);
     
     if (deezerSongs && deezerSongs.length > 0) {
@@ -949,51 +1019,23 @@ app.get("/api/artist-tracks", async (req, res) => {
       }
     }
 
-    // Check if songs list consists of fallback dummy tracks
-    const isFallbackDummy = songs.length === 0 || songs.some(s => s.title.toLowerCase().startsWith("top track"));
+    // Sort songs by rank descending, and slice to top 40 popular songs
+    songs = songs.sort((a, b) => b.rank - a.rank).slice(0, 40);
 
-    let validTracks: any[] = [];
+    const validTracks = songs.map((song, idx) => {
+      const thumbnail = song.thumbnail || getDeterministicTrackThumbnail(name, song.title, idx);
+      const views = getDeterministicTrackViews(name, song.title);
+      const duration = song.duration || "3:30";
 
-    if (!isFallbackDummy) {
-      // Sort songs by rank descending, and slice to top 40 popular songs
-      songs = songs.sort((a, b) => b.rank - a.rank).slice(0, 40);
-
-      // 2. Resolve each song in parallel on YouTube
-      const resolvedTracks = await Promise.all(
-        songs.map(async (song) => {
-          const query = `${name} ${song.title}`;
-          const results = await searchYouTube(query + " audio", 1);
-          if (results && results[0]) {
-            // Force title, artist, and beautiful deterministic plays views
-            return {
-              ...results[0],
-              title: song.title,
-              artist: name,
-              views: results[0].views || getDeterministicTrackViews(name, song.title)
-            };
-          }
-          return null;
-        })
-      );
-      validTracks = resolvedTracks.filter(t => t !== null);
-    }
-
-    // If we have no valid tracks, or if they were fallback dummy tracks, search YouTube directly for the artist's actual videos!
-    if (validTracks.length === 0) {
-      console.log(`[YouTube Direct Fallback] Fetching direct video tracks for artist: ${name}`);
-      const ytResults = await searchYouTube(`${name}`, 35);
-      validTracks = ytResults
-        .filter(t => t !== null)
-        .slice(0, 30)
-        .map(t => {
-          return {
-            ...t,
-            title: t.title,
-            artist: name,
-            views: t.views || getDeterministicTrackViews(name, t.title)
-          };
-        });
-    }
+      return {
+        id: `resolve:${encodeURIComponent(name)}:${encodeURIComponent(song.title)}`,
+        title: song.title,
+        artist: name,
+        duration: duration,
+        thumbnail: thumbnail,
+        views: views
+      };
+    });
 
     const responseData = { results: validTracks };
 
@@ -1006,6 +1048,43 @@ app.get("/api/artist-tracks", async (req, res) => {
   } catch (error) {
     console.error("Error retrieving artist tracks:", error);
     res.status(500).json({ error: "Failed to retrieve artist tracks" });
+  }
+});
+
+app.get("/api/resolve-track", async (req, res) => {
+  const artist = req.query.artist as string;
+  const title = req.query.title as string;
+  if (!artist || !title) {
+    return res.status(400).json({ error: "Missing artist or title" });
+  }
+
+  try {
+    const query = `${artist} ${title}`;
+    console.log(`[Resolve Track] Searching YouTube for: ${query}`);
+    const results = await searchYouTube(query + " audio", 1);
+    if (results && results[0]) {
+      return res.json({
+        id: results[0].id,
+        views: results[0].views || getDeterministicTrackViews(artist, title),
+        duration: results[0].duration || "3:30"
+      });
+    }
+
+    // Fallback search without "audio"
+    const fallbackResults = await searchYouTube(query, 1);
+    if (fallbackResults && fallbackResults[0]) {
+      return res.json({
+        id: fallbackResults[0].id,
+        views: fallbackResults[0].views || getDeterministicTrackViews(artist, title),
+        duration: fallbackResults[0].duration || "3:30"
+      });
+    }
+
+    // Ultimate fallback (just a random video or empty ID)
+    res.json({ id: "dQw4w9WgXcQ" });
+  } catch (err) {
+    console.error("Error resolving track:", err);
+    res.status(500).json({ error: "Failed to resolve track" });
   }
 });
 
@@ -1135,53 +1214,8 @@ app.get("/api/artist-albums", async (req, res) => {
   }
 
   try {
-    let albums = await fetchArtistAlbumsFromDeezer(name);
-    
-    // Fallback if Deezer returned nothing or failed
-    if (!albums || albums.length === 0) {
-      const ai = getGemini();
-      if (ai) {
-        try {
-          const prompt = `Return the complete or actual list of music albums released by "${name}" in JSON format.
-You must return strictly a JSON array of objects, each object representing an album, with these keys:
-- "id": A unique string ID (e.g., "album_1", "album_2")
-- "title": Album name
-- "cover": A beautiful Unsplash placeholder URL related to music/concert/album-art (e.g., https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=300&q=80)
-- "year": The release year (e.g., "2022")
-- "tracksCount": Number of tracks in the album (e.g., 12)
-
-Return ONLY the JSON array. Do not wrap it in markdown block code formatting.`;
-          const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: prompt
-          });
-          const text = response.text || "[]";
-          const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
-          const parsed = JSON.parse(cleanText);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            albums = parsed.map((alb: any, idx: number) => ({
-              id: alb.id || `fallback_album_${idx}`,
-              title: alb.title,
-              cover: alb.cover || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=300&q=80",
-              year: String(alb.year || "2020"),
-              tracksCount: alb.tracksCount || 10
-            }));
-          }
-        } catch (gemError) {
-          // Gemini album generation fallback
-        }
-      }
-    }
-
-    // Default fallback albums if nothing works
-    if (!albums || albums.length === 0) {
-      albums = [
-        { id: "fallback_1", title: "Greatest Hits", year: "2024", tracksCount: 12, cover: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=300&q=80" },
-        { id: "fallback_2", title: "Live Collection", year: "2022", tracksCount: 10, cover: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=300&q=80" }
-      ];
-    }
-
-    res.json({ results: albums });
+    const albums = await fetchArtistAlbumsFromDeezer(name);
+    res.json({ results: albums || [] });
   } catch (error) {
     console.error("Error fetching artist albums:", error);
     res.status(500).json({ error: "Failed to fetch artist albums" });

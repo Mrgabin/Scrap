@@ -271,7 +271,20 @@ export default function QuantumCoreBackground() {
     window.addEventListener("mousemove", handleMouseMove);
 
     // Render loop parameters
-    const clock = new THREE.Clock();
+    class CustomClock {
+      private startTime = performance.now();
+      private oldTime = performance.now();
+      getElapsedTime() {
+        return (performance.now() - this.startTime) / 1000;
+      }
+      getDelta() {
+        const newTime = performance.now();
+        const delta = (newTime - this.oldTime) / 1000;
+        this.oldTime = newTime;
+        return delta;
+      }
+    }
+    const clock = new CustomClock();
     let animationFrameId: number;
 
     // Linear interpolation loop helper

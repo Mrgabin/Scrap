@@ -965,6 +965,50 @@ export default function App() {
     }
   };
 
+  // Dynamic resolution of YouTube Track IDs on-the-fly when playing
+  useEffect(() => {
+    if (!currentTrack || !currentTrack.id.startsWith("resolve:")) return;
+
+    let active = true;
+
+    const resolveTrack = async () => {
+      const parts = currentTrack.id.split(":");
+      const artist = decodeURIComponent(parts[1] || "");
+      const title = decodeURIComponent(parts[2] || "");
+      
+      try {
+        const response = await fetch(`/api/resolve-track?artist=${encodeURIComponent(artist)}&title=${encodeURIComponent(title)}`);
+        if (response.ok && active) {
+          const data = await response.json();
+          if (data && data.id) {
+            const resolvedTrack = {
+              ...currentTrack,
+              id: data.id,
+              views: data.views || currentTrack.views,
+              duration: data.duration || currentTrack.duration
+            };
+
+            // Update current track
+            setCurrentTrack(resolvedTrack);
+
+            // Also update the track in the playQueue so next/prev has correct IDs
+            setPlayQueue(prevQueue => 
+              prevQueue.map(t => t.id === currentTrack.id ? resolvedTrack : t)
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Error resolving track in hook:", err);
+      }
+    };
+
+    resolveTrack();
+
+    return () => {
+      active = false;
+    };
+  }, [currentTrack?.id]);
+
   // Click outside search container listener to close history dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1135,6 +1179,137 @@ export default function App() {
     setSeekTo(seconds);
     setCurrentTime(seconds);
   };
+
+  // Create stable references for event handlers to prevent continuous MediaSession teardown/re-registration
+  const handleNextTrackRef = useRef(handleNextTrack);
+  const handlePrevTrackRef = useRef(handlePrevTrack);
+  const handlePlayPauseToggleRef = useRef(handlePlayPauseToggle);
+
+  useEffect(() => {
+    handleNextTrackRef.current = handleNextTrack;
+    handlePrevTrackRef.current = handlePrevTrack;
+    handlePlayPauseToggleRef.current = handlePlayPauseToggle;
+  });
+
+  // Media Session & Hardware Keys Integration (Keyboards, Stream Decks, Headsets)
+  useEffect(() => {
+    if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
+
+    if (currentTrack) {
+      try {
+        const MediaMetadataClass = (window as any).MediaMetadata;
+        if (MediaMetadataClass) {
+          navigator.mediaSession.metadata = new MediaMetadataClass({
+            title: currentTrack.title,
+            artist: currentTrack.artist,
+            album: currentTrack.album || "Spotify Clone",
+            artwork: [
+              { src: currentTrack.thumbnail || "/icon.png", sizes: "96x96", type: "image/png" },
+              { src: currentTrack.thumbnail || "/icon.png", sizes: "128x128", type: "image/png" },
+              { src: currentTrack.thumbnail || "/icon.png", sizes: "192x192", type: "image/png" },
+              { src: currentTrack.thumbnail || "/icon.png", sizes: "256x256", type: "image/png" },
+              { src: currentTrack.thumbnail || "/icon.png", sizes: "384x384", type: "image/png" },
+              { src: currentTrack.thumbnail || "/icon.png", sizes: "512x512", type: "image/png" },
+            ],
+          });
+        }
+      } catch (e) {
+        console.warn("Could not set MediaSession metadata:", e);
+      }
+    } else {
+      navigator.mediaSession.metadata = null;
+    }
+  }, [currentTrack]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
+    navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+  }, [isPlaying]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
+
+    try {
+      navigator.mediaSession.setActionHandler("play", () => {
+        handlePlayPauseToggleRef.current();
+      });
+      navigator.mediaSession.setActionHandler("pause", () => {
+        handlePlayPauseToggleRef.current();
+      });
+      navigator.mediaSession.setActionHandler("nexttrack", () => {
+        handleNextTrackRef.current();
+      });
+      navigator.mediaSession.setActionHandler("previoustrack", () => {
+        handlePrevTrackRef.current();
+      });
+    } catch (error) {
+      console.warn("Error setting MediaSession action handlers:", error);
+    }
+
+    return () => {
+      if (typeof window !== "undefined" && "mediaSession" in navigator) {
+        try {
+          navigator.mediaSession.setActionHandler("play", null);
+          navigator.mediaSession.setActionHandler("pause", null);
+          navigator.mediaSession.setActionHandler("nexttrack", null);
+          navigator.mediaSession.setActionHandler("previoustrack", null);
+        } catch (e) {}
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Ignore key events when typing in input or text fields
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      // Check standard media keys and common keyboard shortcuts (including multiple variants)
+      const isNextKey = 
+        e.key === "MediaTrackNext" || 
+        e.key === "MediaNextTrack" || 
+        (e.shiftKey && e.key === "ArrowRight") ||
+        (e.ctrlKey && e.key === "ArrowRight");
+
+      const isPrevKey = 
+        e.key === "MediaTrackPrevious" || 
+        e.key === "MediaPrevTrack" || 
+        e.key === "MediaPreviousTrack" || 
+        (e.shiftKey && e.key === "ArrowLeft") ||
+        (e.ctrlKey && e.key === "ArrowLeft");
+
+      const isPlayPauseKey = 
+        e.key === "MediaPlayPause" || 
+        e.key === "MediaPlay" ||
+        e.key === "MediaPause" ||
+        e.key === " " || 
+        e.code === "Space";
+
+      if (isNextKey) {
+        e.preventDefault();
+        handleNextTrackRef.current();
+      } else if (isPrevKey) {
+        e.preventDefault();
+        handlePrevTrackRef.current();
+      } else if (isPlayPauseKey) {
+        // Space bar or PlayPause media key plays/pauses if not in input fields
+        e.preventDefault();
+        handlePlayPauseToggleRef.current();
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleGlobalKeyDown);
+    };
+  }, []);
 
   // 7. Track Liked Status toggling on Firestore or LocalStorage
   const handleLikeToggle = async () => {
@@ -1437,42 +1612,62 @@ export default function App() {
       e.preventDefault();
       setPasswordError("");
       
-      if (!passwordSetupInput.trim()) {
+      const trimmedPassword = passwordSetupInput;
+      
+      if (!trimmedPassword) {
         setPasswordError("Veuillez saisir un mot de passe.");
         return;
       }
-      if (passwordSetupInput !== passwordConfirmInput) {
+      if (trimmedPassword.length < 6) {
+        setPasswordError("Le mot de passe doit contenir au moins 6 caractères.");
+        return;
+      }
+      if (trimmedPassword !== passwordConfirmInput) {
         setPasswordError("Les mots de passe ne correspondent pas.");
         return;
       }
       
       setPasswordLoading(true);
       try {
-        await setDoc(doc(db, "mot_de_passe", user.uid), {
-          uid: user.uid,
-          email: user.email,
-          password: passwordSetupInput,
-          createdAt: new Date().toISOString()
-        });
-        
-        // Link Email/Password credential so user can log in via E-mail + Password with this password too!
+        // Link Email/Password credential so user can log in via E-mail + Password too!
         if (user.email) {
           try {
-            const credential = EmailAuthProvider.credential(user.email, passwordSetupInput);
+            const credential = EmailAuthProvider.credential(user.email, trimmedPassword);
             await linkWithCredential(user, credential);
             console.log("Successfully linked email/password provider during setup!");
           } catch (linkErr: any) {
-            console.warn("Could not link email/password credential:", linkErr);
+            console.warn("Firebase linkWithCredential error during setup:", linkErr);
+            if (linkErr.code === "auth/weak-password") {
+              throw new Error("Le mot de passe doit contenir au moins 6 caractères.");
+            } else if (linkErr.code === "auth/operation-not-allowed") {
+              throw new Error("La méthode de connexion par E-mail/Mot de passe n'est pas activée dans Firebase.");
+            } else if (linkErr.code === "auth/credential-already-in-use" || linkErr.code === "auth/email-already-in-use") {
+              // Account already linked or email already in use by another password credential.
+              // We can proceed since it is already linked or existing.
+              console.log("Credential already linked, continuing with Firestore save.");
+            } else if (linkErr.code === "auth/requires-recent-login") {
+              throw new Error("Sécurité : Veuillez vous déconnecter et vous reconnecter avec Google pour configurer votre mot de passe.");
+            } else {
+              throw new Error("Erreur de liaison Firebase : " + (linkErr.message || linkErr.code));
+            }
           }
         }
         
-        setCorrectPassword(passwordSetupInput);
+        // Save to Firestore so admin can retrieve/verify if needed
+        await setDoc(doc(db, "mot_de_passe", user.uid), {
+          uid: user.uid,
+          email: user.email,
+          password: trimmedPassword,
+          createdAt: new Date().toISOString()
+        });
+        
+        setCorrectPassword(trimmedPassword);
         setHasPasswordInDb(true);
         setIsPasswordVerified(true);
         setPasswordError("");
       } catch (err: any) {
-        console.error("Error saving password to Firestore:", err);
-        setPasswordError("Une erreur est survenue lors de l'enregistrement de votre mot de passe.");
+        console.error("Error in password setup:", err);
+        setPasswordError(err.message || "Une erreur est survenue lors de l'enregistrement de votre mot de passe.");
         try {
           handleFirestoreError(err, OperationType.WRITE, "mot_de_passe/" + user.uid);
         } catch (formattedError) {
@@ -1545,21 +1740,22 @@ export default function App() {
               <div className="text-center mb-6">
                 <h2 className="text-base font-bold text-neutral-200">Création de votre mot de passe</h2>
                 <p className="text-xs text-neutral-400 mt-2 leading-relaxed">
-                  Il semblerait que vous n'ayez pas encore défini de mot de passe pour cette application.
-                  Veuillez en configurer un. Il sera enregistré en base de données pour permettre à un administrateur de valider votre identité.
+                  Veuillez configurer un mot de passe sécurisé d'au moins 6 caractères. 
+                  Il permettra de vous connecter directement avec l'adresse e-mail de votre compte Google.
                 </p>
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-wider mb-2">Nouveau mot de passe</label>
+                <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-wider mb-2">Nouveau mot de passe (min. 6 car.)</label>
                 <div className="relative">
                   <input
                     type={showPasswordChar ? "text" : "password"}
                     value={passwordSetupInput}
                     onChange={(e) => setPasswordSetupInput(e.target.value)}
-                    placeholder="Saisissez un mot de passe"
+                    placeholder="Saisissez un mot de passe (min. 6 car.)"
                     className="w-full bg-[#1e1e1e] border border-white/5 rounded-lg py-3 px-4 text-sm focus:outline-none focus:border-[#1DB954] transition-all pr-11 text-white font-medium"
                     required
+                    minLength={6}
                   />
                   <button
                     type="button"

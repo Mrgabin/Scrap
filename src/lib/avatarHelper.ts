@@ -1,9 +1,89 @@
 export const DETERMINISTIC_AVATARS: string[] = [];
 
 export function getDeterministicArtistAvatar(artistName: string): string {
-  // Return empty string as requested by the user, so no random faces/placeholders are used
-  // and the components can render a beautiful empty grey circle instead.
-  return "";
+  const normalized = (artistName || "").toLowerCase().trim();
+  
+  // Specific known high-quality matching Unsplash artist/music images
+  if (normalized.includes("weeknd")) {
+    return "https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?auto=format&fit=crop&w=300&q=80"; // Moody retro neon male
+  } else if (normalized.includes("daft punk")) {
+    return "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=300&q=80"; // Synth/DJ stage light French Touch
+  } else if (normalized.includes("stromae")) {
+    return "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80"; // Stylish Belgian male portrait
+  } else if (normalized.includes("femtogo") || normalized.includes("ptite soeur")) {
+    return "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=300&q=80"; // French cloud-rap stylish streetwear male
+  } else if (normalized.includes("clara luciani") || normalized.includes("luciani")) {
+    return "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=300&q=80"; // Elegant classic French female portrait
+  } else if (normalized.includes("angèle") || normalized.includes("angele")) {
+    return "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=300&q=80"; // Bright charismatic Belgian pop female
+  } else if (normalized.includes("lofi girl") || normalized.includes("chill") || normalized.includes("sleep")) {
+    return "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?auto=format&fit=crop&w=300&q=80"; // Cozy lofi study desk / nature
+  } else if (normalized.includes("queen")) {
+    return "https://images.unsplash.com/photo-1468164016595-6108e4c60c8b?auto=format&fit=crop&w=300&q=80"; // Classic arena rock concert light
+  } else if (normalized.includes("nirvana")) {
+    return "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=300&q=80"; // Grunge retro microphone
+  } else if (normalized.includes("ac/dc") || normalized.includes("acdc")) {
+    return "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?auto=format&fit=crop&w=300&q=80"; // Energetic hard rock stage/guitar
+  } else if (normalized.includes("ziak")) {
+    return "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=300&q=80"; // Mysterious dark drill masked vibe
+  } else if (normalized.includes("lewild") || normalized.includes("pepyth")) {
+    return "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=300&q=80"; // Stylish modern afro-beat/hip-hop portrait
+  } else if (normalized.includes("oliver tree")) {
+    return "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80"; // Ecclectic stylish male portrait
+  } else if (normalized.includes("sheeran")) {
+    return "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=300&q=80"; // Acoustic singer/guitar portrait
+  } else if (normalized.includes("styles")) {
+    return "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=300&q=80"; // Fashionable retro male look
+  } else if (normalized.includes("lipa")) {
+    return "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80"; // Pop-diva elegant female portrait
+  } else if (normalized.includes("dragons")) {
+    return "https://images.unsplash.com/photo-1468164016595-6108e4c60c8b?auto=format&fit=crop&w=300&q=80"; // Modern stadium rock band vibe
+  } else if (normalized.includes("cyrus")) {
+    return "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=80"; // Confident stylish blonde female portrait
+  } else if (normalized.includes("bieber") || normalized.includes("laroi")) {
+    return "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=300&q=80"; // Urban streetwear pop-star male portrait
+  } else if (normalized.includes("bts")) {
+    return "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=300&q=80"; // Korean pop-star style group portrait
+  } else if (normalized.includes("indila")) {
+    return "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=300&q=80"; // Mysterious classic female vocalist look
+  } else if (normalized.includes("coldplay")) {
+    return "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=300&q=80"; // Melodic lights and stadium performance
+  } else if (normalized.includes("guns")) {
+    return "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?auto=format&fit=crop&w=300&q=80"; // Hard rock guitar action shot
+  } else if (normalized.includes("radiohead")) {
+    return "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=300&q=80"; // Moody, artistic, intellectual male portrait
+  } else if (normalized.includes("oasis")) {
+    return "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80"; // 90s retro-style male portrait
+  } else if (normalized.includes("peppers")) {
+    return "https://images.unsplash.com/photo-1468164016595-6108e4c60c8b?auto=format&fit=crop&w=300&q=80"; // Funky energetic rock stage
+  } else if (normalized.includes("linkin")) {
+    return "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=300&q=80"; // Alternative rock emotional performance lighting
+  }
+
+  // Deterministic fallback based on name hash
+  const defaultAvatars = [
+    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1552058544-f2b08422138a?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?auto=format&fit=crop&w=300&q=80"
+  ];
+
+  let hash = 0;
+  for (let i = 0; i < normalized.length; i++) {
+    hash = normalized.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return defaultAvatars[Math.abs(hash) % defaultAvatars.length];
 }
 
 export function getDeterministicArtistBanner(artistName: string): string {

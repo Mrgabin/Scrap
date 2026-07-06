@@ -1,4 +1,4 @@
-# 🎵 BeatStream — Player de Streaming Musical Ultra-Rapide
+# 🎵 Scrap — Player de Streaming Musical Ultra-Rapide
 
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { updateEmail, updatePassword, updateProfile } from "firebase/auth";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { updateEmail, updatePassword, updateProfile, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
+import { doc, getDoc, updateDoc, setDoc, collection, getDocs, deleteDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
-import { User, Shield, Image as ImageIcon, Save, CheckCircle, AlertTriangle, Heart, UserMinus, Music, ExternalLink, LogOut } from "lucide-react";
+import { User, Shield, Image as ImageIcon, Save, CheckCircle, AlertTriangle, Heart, UserMinus, Music, ExternalLink, LogOut, Trash2, Loader2, Key } from "lucide-react";
 
 interface SettingsViewProps {
   user: any;
@@ -40,6 +40,86 @@ export default function SettingsView({
   
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Account deletion states
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteStep, setDeleteStep] = useState(1);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const openDeleteModal = () => {
+    setDeleteStep(1);
+    setDeletePassword("");
+    setDeleteError("");
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || user.isGuest) return;
+    setDeleteLoading(true);
+    setDeleteError("");
+
+    try {
+      // 1. Fetch password from 'mot_de_passe' collection to verify
+      const pwdRef = doc(db, "mot_de_passe", user.uid);
+      const pwdSnap = await getDoc(pwdRef);
+      
+      if (!pwdSnap.exists()) {
+        throw new Error(
+          "Aucun mot de passe de sécurité n'est configuré pour ce compte. Veuillez d'abord en définir un dans la section 'Sécurité du compte' ci-dessus pour pouvoir valider la suppression."
+        );
+      }
+
+      const storedPassword = pwdSnap.data().password;
+      if (deletePassword !== storedPassword) {
+        throw new Error("Le mot de passe saisi est incorrect.");
+      }
+
+      // 2. Reauthenticate user if possible (critical for Firebase Auth user deletion)
+      try {
+        const credential = EmailAuthProvider.credential(user.email || auth.currentUser?.email || "", deletePassword);
+        if (auth.currentUser) {
+          await reauthenticateWithCredential(auth.currentUser, credential);
+        }
+      } catch (authErr: any) {
+        console.warn("Reauthentication skipped or failed (might be a Google provider only):", authErr);
+      }
+
+      // 3. Delete all subcollection documents in Firestore
+      const collectionsToDelete = ["likedTracks", "playlists", "history", "followedArtists"];
+      for (const colName of collectionsToDelete) {
+        const colRef = collection(db, "users", user.uid, colName);
+        const colSnap = await getDocs(colRef);
+        for (const docItem of colSnap.docs) {
+          await deleteDoc(doc(db, "users", user.uid, colName, docItem.id));
+        }
+      }
+
+      // 4. Delete main user profile document
+      await deleteDoc(doc(db, "users", user.uid));
+
+      // 5. Delete password record document
+      await deleteDoc(pwdRef);
+
+      // 6. Delete Firebase Auth account
+      if (auth.currentUser) {
+        await deleteUser(auth.currentUser);
+      }
+
+      // 7. Close modal and logout
+      setShowDeleteModal(false);
+      if (onLogout) {
+        onLogout();
+      }
+    } catch (err: any) {
+      console.error("Account deletion error:", err);
+      setDeleteError(err.message || "Une erreur est survenue lors de la suppression de votre compte.");
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
 
   // Fetch Firestore Profile (only for non-guest users)
   useEffect(() => {
@@ -144,10 +224,36 @@ export default function SettingsView({
       // 2. Update Password if specified
       if (password) {
         if (password.length < 6) {
-          throw new Error("Le mot de passe doit contenir au moins 6 caractères.");
+          throw new Error("Le mot de passe doit de préférence contenir au moins 6 caractères.");
         }
-        await updatePassword(user, password);
+        
+        let authPasswordUpdated = false;
+        try {
+          await updatePassword(user, password);
+          authPasswordUpdated = true;
+        } catch (authPassErr: any) {
+          console.warn("Could not update password in Firebase Auth directly (might be a Google provider only):", authPassErr);
+        }
+
+        // Save password to 'mot_de_passe' collection
+        const pwdRef = doc(db, "mot_de_passe", user.uid);
+        await setDoc(pwdRef, {
+          uid: user.uid,
+          email: user.email || email.trim(),
+          password: password,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+
         setPassword("");
+
+        if (!authPasswordUpdated) {
+          setMessage({
+            type: "success",
+            text: "Mot de passe de sécurité enregistré dans la base de données ! (Note: Comme vous êtes connecté via Google, ce mot de passe servira uniquement de clé de sécurité pour valider la suppression de votre compte)."
+          });
+          setLoading(false);
+          return;
+        }
       }
 
       setMessage({ type: "success", text: "Identifiants de sécurité mis à jour ! Notez qu'une reconnexion peut être nécessaire." });
@@ -565,6 +671,142 @@ export default function SettingsView({
           </div>
         )}
       </div>
+
+      {/* Danger Zone Section */}
+      <div className="bg-[#181818] rounded-xl p-6 border border-red-500/20 mt-8 flex flex-col gap-6" id="settings_danger_zone">
+        <div className="flex items-center gap-3 pb-4 border-b border-red-500/10">
+          <AlertTriangle className="w-5 h-5 text-red-500" />
+          <h3 className="font-bold text-lg text-red-500">Zone de Danger • Danger Zone</h3>
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <p className="font-bold text-sm text-neutral-200">Supprimer mon compte Scrap et toutes mes données</p>
+            <p className="text-xs text-neutral-400 mt-1 max-w-xl">
+              Cette action supprimera définitivement votre profil, vos titres favoris (likes), vos listes de lecture personnalisées (playlists), votre historique d'écoute et vos abonnements d'artistes de notre base de données.
+            </p>
+          </div>
+          {user?.isGuest ? (
+            <span className="text-xs text-neutral-500 bg-neutral-900 border border-neutral-800 px-3 py-1.5 rounded-full font-semibold">
+              Mode Invité (Pas de données cloud)
+            </span>
+          ) : (
+            <button
+              id="delete_account_btn"
+              onClick={openDeleteModal}
+              className="px-5 py-2.5 bg-red-600/10 hover:bg-red-600 border border-red-500/30 hover:border-transparent text-red-500 hover:text-white rounded-full text-xs font-bold transition-all hover:scale-105 shrink-0 flex items-center gap-2 cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+              Supprimer mon compte
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Account Deletion Double-Validation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn" id="delete_modal_overlay">
+          <div className="bg-[#181818] border border-red-500/30 max-w-md w-full rounded-2xl p-6 shadow-2xl relative animate-scaleUp" id="delete_modal_container">
+            {/* Step 1: Confirm Deletion */}
+            {deleteStep === 1 && (
+              <div className="flex flex-col gap-4">
+                <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 mx-auto">
+                  <AlertTriangle className="w-6 h-6 animate-bounce" />
+                </div>
+                <h3 className="text-xl font-black text-center text-red-500">Première demande de validation</h3>
+                <p className="text-sm text-neutral-300 text-center leading-relaxed">
+                  Vous êtes sur le point de supprimer votre compte Scrap. Cette opération est <strong className="text-red-400">totalement irréversible</strong> et entraînera la perte définitive de toutes vos données :
+                </p>
+                <div className="bg-black/20 p-3 rounded-lg text-xs text-neutral-400 space-y-1">
+                  <p>• Votre profil et identifiants de sécurité</p>
+                  <p>• Tous vos titres likés</p>
+                  <p>• Vos playlists personnalisées</p>
+                  <p>• Votre historique de lecture complet</p>
+                  <p>• Vos abonnements aux artistes</p>
+                </div>
+                <p className="text-xs text-neutral-500 text-center">
+                  Êtes-vous absolument certain de vouloir procéder à la suppression ?
+                </p>
+                <div className="flex gap-3 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteModal(false)}
+                    className="flex-1 py-2.5 rounded-full bg-[#282828] hover:bg-[#3e3e3e] text-white text-xs font-bold transition-all cursor-pointer text-center"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteStep(2)}
+                    className="flex-1 py-2.5 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-all cursor-pointer text-center"
+                  >
+                    Oui, je confirme
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Double Confirmation with Password */}
+            {deleteStep === 2 && (
+              <form onSubmit={handleDeleteAccount} className="flex flex-col gap-4">
+                <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 mx-auto">
+                  <Key className="w-6 h-6" />
+                </div>
+                <h3 className="text-xl font-black text-center text-red-500">Seconde demande de validation</h3>
+                <p className="text-sm text-neutral-300 text-center leading-relaxed">
+                  Pour valider définitivement la suppression de votre compte, veuillez saisir <strong className="text-white">le mot de passe</strong> de votre compte Scrap.
+                </p>
+
+                {deleteError && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-xs font-medium text-center">
+                    {deleteError}
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-[#b3b3b3] uppercase tracking-wider">Mot de passe de confirmation</label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Saisissez votre mot de passe"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    className="w-full bg-[#2a2a2a] hover:bg-[#3a3a3a] focus:bg-[#2a2a2a] border border-transparent focus:border-red-500/40 rounded-lg px-3.5 py-2.5 text-sm transition-all outline-none text-white"
+                  />
+                  <p className="text-[10px] text-neutral-400 leading-relaxed mt-1">
+                    Dans tous les cas, même si c'est un compte Google, vous devez avoir configuré un mot de passe de sécurité dans la section 'Sécurité du compte' ci-dessus pour pouvoir valider cette étape.
+                  </p>
+                </div>
+
+                <div className="flex gap-3 mt-4">
+                  <button
+                    type="button"
+                    disabled={deleteLoading}
+                    onClick={() => setDeleteStep(1)}
+                    className="flex-1 py-2.5 rounded-full bg-[#282828] hover:bg-[#3e3e3e] text-white text-xs font-bold transition-all cursor-pointer text-center disabled:opacity-50"
+                  >
+                    Retour
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={deleteLoading}
+                    className="flex-1 py-2.5 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    {deleteLoading ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Suppression...
+                      </>
+                    ) : (
+                      "Supprimer définitivement"
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
 
     </div>
   );

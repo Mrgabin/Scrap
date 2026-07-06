@@ -7,7 +7,10 @@ import {
   Volume2, 
   VolumeX, 
   Heart, 
-  Maximize2 
+  Maximize2,
+  Shuffle,
+  Sparkles,
+  Ban
 } from "lucide-react";
 import { Track } from "../types";
 
@@ -25,6 +28,15 @@ interface PlayerProps {
   isLiked: boolean;
   onLikeToggle: () => void;
   onSelectArtist?: (artistName: string) => void;
+  
+  // Shuffle Mode Support
+  shuffleMode: number; // 0: off, 1: shuffle, 2: smart shuffle
+  onShuffleToggle: () => void;
+  isLikedSongsContext?: boolean;
+  
+  // Smart Shuffle Recommendation attributes
+  isRecommendation?: boolean;
+  onDislikeRecommendation?: () => void;
 }
 
 export default function Player({
@@ -40,7 +52,12 @@ export default function Player({
   setVolume,
   isLiked,
   onLikeToggle,
-  onSelectArtist
+  onSelectArtist,
+  shuffleMode,
+  onShuffleToggle,
+  isLikedSongsContext = false,
+  isRecommendation = false,
+  onDislikeRecommendation
 }: PlayerProps) {
   const [prevVolume, setPrevVolume] = useState(volume);
 
@@ -79,25 +96,45 @@ export default function Player({
               <img referrerPolicy="no-referrer" src={currentTrack.thumbnail} alt={currentTrack.title} className="w-full h-full object-cover" />
             </div>
             <div className="overflow-hidden">
-              <p className="text-sm font-semibold text-white truncate max-w-[180px] hover:underline cursor-pointer">
-                {currentTrack.title}
-              </p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm font-semibold text-white truncate max-w-[130px] hover:underline cursor-pointer">
+                  {currentTrack.title}
+                </p>
+                {isRecommendation && (
+                  <span className="bg-[#1DB954]/10 text-[#1DB954] border border-[#1DB954]/30 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider flex items-center gap-0.5 shrink-0 animate-pulse" title="Lecture Aléatoire Intelligente">
+                    <Sparkles className="w-2 h-2 fill-current" /> IA
+                  </span>
+                )}
+              </div>
               <p 
                 onClick={() => onSelectArtist?.(currentTrack.artist)}
-                className="text-xs text-[#b3b3b3] truncate max-w-[180px] hover:underline hover:text-white cursor-pointer"
+                className="text-xs text-[#b3b3b3] truncate max-w-[160px] hover:underline hover:text-white cursor-pointer"
               >
                 {currentTrack.artist}
               </p>
             </div>
-            <button 
-              id="player_like_btn"
-              onClick={onLikeToggle}
-              className={`hover:scale-105 active:scale-95 transition-all p-1 ml-2 focus:outline-none ${
-                isLiked ? "text-[#1DB954]" : "text-[#b3b3b3] hover:text-white"
-              }`}
-            >
-              <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} />
-            </button>
+            <div className="flex items-center gap-1 shrink-0">
+              <button 
+                id="player_like_btn"
+                onClick={onLikeToggle}
+                className={`hover:scale-105 active:scale-95 transition-all p-1 ml-2 focus:outline-none ${
+                  isLiked ? "text-[#1DB954]" : "text-[#b3b3b3] hover:text-white"
+                }`}
+                title={isLiked ? "Retirer des favoris" : "Ajouter aux favoris (Signal positif fort)"}
+              >
+                <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} />
+              </button>
+              {isRecommendation && onDislikeRecommendation && (
+                <button 
+                  id="player_dislike_btn"
+                  onClick={onDislikeRecommendation}
+                  className="text-[#b3b3b3] hover:text-red-500 hover:scale-105 active:scale-95 transition-all p-1 focus:outline-none"
+                  title="Masquer cette suggestion (Signal négatif fort)"
+                >
+                  <Ban className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </>
         ) : (
           <div className="flex items-center gap-3">
@@ -116,6 +153,35 @@ export default function Player({
       <div className="flex-1 flex flex-col items-center gap-2 max-w-[600px]">
         {/* Buttons */}
         <div className="flex items-center gap-5">
+          {/* Shuffle Button with 3 states */}
+          <button 
+            id="player_shuffle_btn"
+            onClick={onShuffleToggle}
+            disabled={!currentTrack}
+            className={`relative p-2 rounded-full focus:outline-none transition-all duration-200 disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center ${
+              shuffleMode === 1 || shuffleMode === 2 
+                ? "text-[#1DB954] hover:text-[#1ed760] scale-105" 
+                : "text-[#b3b3b3] hover:text-white"
+            }`}
+            title={
+              shuffleMode === 0 
+                ? "Activer la lecture aléatoire" 
+                : shuffleMode === 1 
+                  ? (isLikedSongsContext ? "Activer l'Aléatoire Intelligent (Smart Shuffle)" : "Désactiver la lecture aléatoire")
+                  : "Désactiver l'Aléatoire Intelligent (Smart Shuffle)"
+            }
+          >
+            <div className="relative">
+              <Shuffle className="w-5 h-5" />
+              {shuffleMode === 2 && (
+                <Sparkles className="w-2.5 h-2.5 text-[#1DB954] absolute -top-1.5 -left-1.5 fill-current animate-pulse" />
+              )}
+            </div>
+            {(shuffleMode === 1 || shuffleMode === 2) && (
+              <span className="absolute bottom-[-1px] w-1.5 h-1.5 bg-[#1DB954] rounded-full shadow-[0_0_4px_#1DB954]" />
+            )}
+          </button>
+
           <button 
             onClick={onPrevTrack}
             disabled={!currentTrack}

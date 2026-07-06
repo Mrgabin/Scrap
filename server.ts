@@ -1777,6 +1777,163 @@ app.post("/api/generate-mixes", async (req, res) => {
   }
 });
 
+// 5. Spotify Playlist Import Endpoint
+app.post("/api/spotify/import", async (req, res) => {
+  const { clientId, clientSecret, playlistId } = req.body;
+
+  if (!clientId || !clientSecret || !playlistId) {
+    return res.status(400).json({ error: "Missing required parameters: clientId, clientSecret, playlistId" });
+  }
+
+  try {
+    // A. Request Spotify OAuth Access Token (Client Credentials flow) to validate credentials first
+    const tokenResponse = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": "Basic " + Buffer.from(`${clientId}:${clientSecret}`).toString("base64")
+      },
+      body: "grant_type=client_credentials"
+    });
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      console.error("Spotify Token Error:", errorText);
+      return res.status(401).json({ error: "Identifiants Spotify invalides ou expirés. Veuillez vérifier votre Client ID et Client Secret." });
+    }
+
+    // B. Fetch Playlist tracks using the public embed player to bypass the deprecated Client Credentials restriction (Spotify 403 Forbidden since Nov 2024)
+    const embedUrl = `https://open.spotify.com/embed/playlist/${playlistId}`;
+    const embedResponse = await fetch(embedUrl, {
+      method: "GET",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Cache-Control": "no-cache"
+      }
+    });
+
+    if (!embedResponse.ok) {
+      console.error(`Spotify Embed Fetch Error. Status: ${embedResponse.status}`);
+      return res.status(404).json({ error: "Playlist Spotify introuvable ou privée. Assurez-vous que le lien de la playlist est public." });
+    }
+
+    const html = await embedResponse.text();
+
+    // Extract the JSON data from <script id="resource" type="application/json">...</script>
+    let resourceData: any = null;
+    const resourceMatch = html.match(/<script[^>]*id="resource"[^>]*>([\s\S]*?)<\/script>/i);
+    
+    if (resourceMatch) {
+      try {
+        const jsonText = resourceMatch[1].trim();
+        resourceData = JSON.parse(jsonText);
+      } catch (e) {
+        console.warn("Failed to parse script id=resource:", e);
+      }
+    }
+
+    // Fallback 1: Extract from <script id="initial-state" type="text/plain">...</script> (Base64-encoded JSON)
+    if (!resourceData) {
+      const initialStateMatch = html.match(/<script[^>]*id="initial-state"[^>]*>([\s\S]*?)<\/script>/i);
+      if (initialStateMatch) {
+        try {
+          const jsonText = Buffer.from(initialStateMatch[1].trim(), 'base64').toString('utf-8');
+          const parsed = JSON.parse(jsonText);
+          if (parsed && parsed.routeData && parsed.routeData.state) {
+            resourceData = parsed.routeData.state;
+          }
+        } catch (e) {
+          console.warn("Failed to parse script id=initial-state:", e);
+        }
+      }
+    }
+
+    // Fallback 2: Extract from <script id="__NEXT_DATA__" type="application/json">...</script>
+    if (!resourceData) {
+      const nextDataMatch = html.match(/<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i);
+      if (nextDataMatch) {
+        try {
+          const jsonText = nextDataMatch[1].trim();
+          const parsed = JSON.parse(jsonText);
+          if (parsed && parsed.props && parsed.props.pageProps && parsed.props.pageProps.state) {
+            resourceData = parsed.props.pageProps.state;
+          }
+        } catch (e) {
+          console.warn("Failed to parse script id=__NEXT_DATA__:", e);
+        }
+      }
+    }
+
+    if (!resourceData) {
+      return res.status(404).json({ error: "Playlist Spotify introuvable, privée ou impossible à analyser. Assurez-vous que le lien de la playlist est bien public." });
+    }
+
+    // Parse the tracks list from the extracted resource data
+    let items: any[] = [];
+    if (resourceData.tracks && Array.isArray(resourceData.tracks.items)) {
+      items = resourceData.tracks.items;
+    } else if (resourceData.tracks && Array.isArray(resourceData.tracks)) {
+      items = resourceData.tracks;
+    } else if (Array.isArray(resourceData.items)) {
+      items = resourceData.items;
+    } else if (resourceData.tracks?.items?.items && Array.isArray(resourceData.tracks.items.items)) {
+      items = resourceData.tracks.items.items;
+    }
+
+    if (items.length === 0) {
+      return res.status(404).json({ error: "Aucun morceau trouvé dans cette playlist ou la playlist est vide." });
+    }
+
+    // C. Format track items into our application's Track interface
+    const formattedTracks = items
+      .map((item: any) => {
+        if (!item) return null;
+        const t = item.track || item;
+        if (!t || !t.name) return null;
+
+        const title = t.name || "Titre inconnu";
+        const artist = t.artists && t.artists.length > 0 ? t.artists[0].name : "Artiste inconnu";
+        const album = t.album ? (t.album.name || t.album) : "Album inconnu";
+        
+        // Duration conversion
+        const durationMs = t.duration_ms || (t.durationSec ? t.durationSec * 1000 : 180000);
+        const totalSec = Math.floor(durationMs / 1000);
+        const mins = Math.floor(totalSec / 60);
+        const secs = totalSec % 60;
+        const durationStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+
+        let thumbnail = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=60";
+        if (t.album && t.album.images && t.album.images.length > 0) {
+          thumbnail = t.album.images[0].url;
+        } else if (t.images && t.images.length > 0) {
+          thumbnail = t.images[0].url;
+        } else if (t.thumbnail) {
+          thumbnail = t.thumbnail;
+        }
+
+        // Pre-resolve ID using our on-the-fly syntax
+        const resolveId = `resolve:${encodeURIComponent(artist)}:${encodeURIComponent(title)}`;
+
+        return {
+          id: resolveId,
+          title,
+          artist,
+          album: typeof album === 'string' ? album : "Album inconnu",
+          duration: durationStr,
+          durationSec: totalSec,
+          thumbnail
+        };
+      })
+      .filter(Boolean);
+
+    res.json({ tracks: formattedTracks });
+  } catch (error: any) {
+    console.error("Spotify import exception:", error);
+    res.status(500).json({ error: error.message || "Une erreur est survenue lors de l'importation." });
+  }
+});
+
 // Vite Middleware for Full Stack setup
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {

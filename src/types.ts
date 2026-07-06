@@ -7,6 +7,7 @@ export interface Track {
   durationSec?: number; // duration in seconds
   thumbnail: string;
   views?: string;
+  isRecommendation?: boolean;
 }
 
 export interface Playlist {

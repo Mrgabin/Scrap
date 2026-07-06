@@ -31,6 +31,7 @@ import SettingsView from "./components/SettingsView";
 import PlaylistView from "./components/PlaylistView";
 import ArtistView from "./components/ArtistView";
 import TasteSurveyModal from "./components/TasteSurveyModal";
+import SpotifyImportModal from "./components/SpotifyImportModal";
 import BlackHoleBackground from "./components/BlackHoleBackground";
 import StableSingularityBackground from "./components/StableSingularityBackground";
 import TectonicLavaBackground from "./components/TectonicLavaBackground";
@@ -398,6 +399,11 @@ export default function App() {
   });
   const [playTrigger, setPlayTrigger] = useState<number>(0);
 
+  // Spotify Credentials & Modal state
+  const [spotifyClientId, setSpotifyClientId] = useState<string>("");
+  const [spotifyClientSecret, setSpotifyClientSecret] = useState<string>("");
+  const [showSpotifyImportModal, setShowSpotifyImportModal] = useState<boolean>(false);
+
   // Playback history stack to support back navigation through dynamic played tracks
   const [playbackHistory, setPlaybackHistory] = useState<Track[]>(() => {
     const saved = localStorage.getItem("spotify_playback_history");
@@ -419,6 +425,31 @@ export default function App() {
     }
     return [];
   });
+
+  // Shuffle & Smart Shuffle state management
+  const [shuffleMode, setShuffleMode] = useState<number>(() => {
+    const saved = localStorage.getItem("spotify_shuffle_mode");
+    return saved ? parseInt(saved, 10) : 0;
+  });
+  const [activePlaybackContext, setActivePlaybackContext] = useState<'liked' | 'playlist' | 'artist' | 'album' | null>(() => {
+    const saved = localStorage.getItem("spotify_active_playback_context");
+    return (saved as any) || null;
+  });
+  const [shufflePlayedIds, setShufflePlayedIds] = useState<string[]>([]);
+  const [smartShuffleCount, setSmartShuffleCount] = useState<number>(0);
+  const [smartShuffleDislikes, setSmartShuffleDislikes] = useState<string[]>([]);
+
+  useEffect(() => {
+    localStorage.setItem("spotify_shuffle_mode", shuffleMode.toString());
+  }, [shuffleMode]);
+
+  useEffect(() => {
+    if (activePlaybackContext) {
+      localStorage.setItem("spotify_active_playback_context", activePlaybackContext);
+    } else {
+      localStorage.removeItem("spotify_active_playback_context");
+    }
+  }, [activePlaybackContext]);
 
   const isBackNavigatingRef = useRef<boolean>(false);
   const isForwardNavigatingRef = useRef<boolean>(false);
@@ -559,6 +590,8 @@ export default function App() {
         setTasteProfile(null);
         setPersonalizedPlaylists([]);
         setShowTasteSurvey(false);
+        setSpotifyClientId("");
+        setSpotifyClientSecret("");
       }
     });
     return unsubscribe;
@@ -576,6 +609,10 @@ export default function App() {
       setRecentTracks([]);
       setTasteProfile(null);
       setPersonalizedPlaylists([]);
+      
+      // Load Spotify credentials from local storage for guest
+      setSpotifyClientId(localStorage.getItem("spotify_client_id") || "");
+      setSpotifyClientSecret(localStorage.getItem("spotify_client_secret") || "");
       return;
     }
 
@@ -667,10 +704,24 @@ export default function App() {
           setCustomBackgroundUrl("");
           localStorage.removeItem("scrap_custom_background_url");
         }
+        
+        // Sync Spotify credentials
+        if (data.spotifyClientId) {
+          setSpotifyClientId(data.spotifyClientId);
+        } else {
+          setSpotifyClientId("");
+        }
+        if (data.spotifyClientSecret) {
+          setSpotifyClientSecret(data.spotifyClientSecret);
+        } else {
+          setSpotifyClientSecret("");
+        }
       } else {
         setTasteProfile(null);
         setCustomBackgroundUrl("");
         localStorage.removeItem("scrap_custom_background_url");
+        setSpotifyClientId("");
+        setSpotifyClientSecret("");
       }
     }, (err) => {
       console.error("User document snapshot failed:", err);
@@ -930,6 +981,28 @@ export default function App() {
     setCurrentTrack(track);
     setIsPlaying(true);
     setPlayTrigger(Date.now());
+
+    // Determine and set playback context
+    let contextType: 'liked' | 'playlist' | 'artist' | 'album' | null = null;
+    if (currentView === "liked-songs") {
+      contextType = "liked";
+    } else if (currentView.startsWith("playlist-")) {
+      contextType = "playlist";
+    } else if (currentView.startsWith("artist-")) {
+      contextType = "artist";
+    } else if (contextList.length > 0 && likedTracks.length > 0 && contextList[0].id === likedTracks[0].id) {
+      contextType = "liked";
+    }
+    setActivePlaybackContext(contextType);
+
+    // If we are not playing from liked songs and smart shuffle is active, fall back to normal shuffle
+    if (contextType !== "liked" && shuffleMode === 2) {
+      setShuffleMode(1);
+    }
+
+    // Reset shuffle states for the new session
+    setShufflePlayedIds([track.id]);
+    setSmartShuffleCount(0);
     
     if (contextList.length > 0) {
       setPlayQueue(contextList);
@@ -1090,6 +1163,17 @@ export default function App() {
   };
 
   const handleNextTrack = () => {
+    // Register negative signal if a recommended track is skipped within 30 seconds
+    if (currentTrack && currentTrack.isRecommendation && currentTime < 30) {
+      setSmartShuffleDislikes(prev => {
+        if (!prev.includes(currentTrack.artist)) {
+          return [...prev, currentTrack.artist];
+        }
+        return prev;
+      });
+      console.log(`Smart Shuffle negative signal registered: Skipped "${currentTrack.title}" by ${currentTrack.artist} within 30s.`);
+    }
+
     if (playbackForwardHistory.length > 0) {
       const forwardCopy = [...playbackForwardHistory];
       const nextTrack = forwardCopy.pop()!;
@@ -1110,17 +1194,152 @@ export default function App() {
       setCurrentTrack(nextTrack);
       setIsPlaying(true);
       setPlayTrigger(Date.now());
-    } else if (playQueue.length > 0 && queueIndex < playQueue.length - 1) {
-      const nextIdx = queueIndex + 1;
-      setQueueIndex(nextIdx);
-      setInitialStartTime(0);
-      setCurrentTime(0);
-      setSeekTo(0);
-      localStorage.setItem("spotify_last_time", "0");
-      setCurrentTrack(playQueue[nextIdx]);
-      setIsPlaying(true);
-      setPlayTrigger(Date.now());
+    } else if (playQueue.length > 0) {
+      if (shuffleMode === 1) {
+        // --- 1. Standard Shuffle ---
+        // Filter out recently played tracks to avoid repetition
+        let eligibleTracks = playQueue.filter(t => !shufflePlayedIds.includes(t.id));
+        if (eligibleTracks.length === 0) {
+          // If all tracks played, reset history and keep the current track out of immediate repeat if possible
+          eligibleTracks = playQueue.filter(t => t.id !== currentTrack?.id);
+          if (eligibleTracks.length === 0) eligibleTracks = playQueue;
+          setShufflePlayedIds([currentTrack?.id || ""]);
+        }
+
+        const randomTrack = eligibleTracks[Math.floor(Math.random() * eligibleTracks.length)];
+        const nextIdx = playQueue.findIndex(t => t.id === randomTrack.id);
+
+        setShufflePlayedIds(prev => [...prev, randomTrack.id]);
+        setQueueIndex(nextIdx !== -1 ? nextIdx : 0);
+        
+        setInitialStartTime(0);
+        setCurrentTime(0);
+        setSeekTo(0);
+        localStorage.setItem("spotify_last_time", "0");
+        setCurrentTrack(randomTrack);
+        setIsPlaying(true);
+        setPlayTrigger(Date.now());
+
+      } else if (shuffleMode === 2 && (activePlaybackContext === "liked" || currentView === "liked-songs")) {
+        // --- 2. Smart Shuffle (Lecture Aléatoire Intelligente) ---
+        const nextCount = smartShuffleCount + 1;
+        setSmartShuffleCount(nextCount);
+
+        // Spotify "1 for 3" ratio: every 4th song (index % 4 === 3) is a recommendation
+        const isRecommendationTurn = nextCount % 4 === 3;
+
+        // Filter recommendations based on negative feedback (disliked artists/titles)
+        const eligibleRecommendations = recommendations.filter(rec => {
+          const notDisliked = !smartShuffleDislikes.some(dis => 
+            rec.artist.toLowerCase() === dis.toLowerCase() || 
+            rec.title.toLowerCase() === dis.toLowerCase()
+          );
+          const notLikedAlready = !likedTracks.some(lt => lt.id === rec.id || lt.title === rec.title);
+          return notDisliked && notLikedAlready;
+        });
+
+        if (isRecommendationTurn && eligibleRecommendations.length > 0) {
+          // Play a recommendation!
+          const chosenRec = eligibleRecommendations[Math.floor(Math.random() * eligibleRecommendations.length)];
+          const recommendationTrack = { ...chosenRec, isRecommendation: true };
+
+          // Insert recommendation in playQueue right after current index to visualize it cleanly
+          const updatedQueue = [...playQueue];
+          const insertIdx = queueIndex + 1;
+          updatedQueue.splice(insertIdx, 0, recommendationTrack);
+          setPlayQueue(updatedQueue);
+          setQueueIndex(insertIdx);
+
+          setInitialStartTime(0);
+          setCurrentTime(0);
+          setSeekTo(0);
+          localStorage.setItem("spotify_last_time", "0");
+          setCurrentTrack(recommendationTrack);
+          setIsPlaying(true);
+          setPlayTrigger(Date.now());
+          console.log(`Smart Shuffle: Injected recommendation "${recommendationTrack.title}" by ${recommendationTrack.artist}.`);
+        } else {
+          // Play a random song from the user's Liked list (normal shuffle within likes)
+          const sourceTracks = likedTracks.length > 0 ? likedTracks : playQueue;
+          let eligibleTracks = sourceTracks.filter(t => !shufflePlayedIds.includes(t.id));
+          if (eligibleTracks.length === 0) {
+            eligibleTracks = sourceTracks.filter(t => t.id !== currentTrack?.id);
+            if (eligibleTracks.length === 0) eligibleTracks = sourceTracks;
+            setShufflePlayedIds([currentTrack?.id || ""]);
+          }
+
+          const randomTrack = eligibleTracks[Math.floor(Math.random() * eligibleTracks.length)];
+          
+          // Make sure it is in our active queue
+          let nextIdx = playQueue.findIndex(t => t.id === randomTrack.id);
+          if (nextIdx === -1) {
+            // Append to queue if missing
+            const updatedQueue = [...playQueue, randomTrack];
+            setPlayQueue(updatedQueue);
+            nextIdx = updatedQueue.length - 1;
+          }
+
+          setShufflePlayedIds(prev => [...prev, randomTrack.id]);
+          setQueueIndex(nextIdx);
+
+          setInitialStartTime(0);
+          setCurrentTime(0);
+          setSeekTo(0);
+          localStorage.setItem("spotify_last_time", "0");
+          setCurrentTrack(randomTrack);
+          setIsPlaying(true);
+          setPlayTrigger(Date.now());
+        }
+
+      } else {
+        // --- 3. Sequential Playback ---
+        if (queueIndex < playQueue.length - 1) {
+          const nextIdx = queueIndex + 1;
+          setQueueIndex(nextIdx);
+          setInitialStartTime(0);
+          setCurrentTime(0);
+          setSeekTo(0);
+          localStorage.setItem("spotify_last_time", "0");
+          setCurrentTrack(playQueue[nextIdx]);
+          setIsPlaying(true);
+          setPlayTrigger(Date.now());
+        }
+      }
     }
+  };
+
+  const handleDislikeRecommendation = () => {
+    if (!currentTrack) return;
+    
+    // Register negative feedback
+    setSmartShuffleDislikes(prev => {
+      if (!prev.includes(currentTrack.artist)) {
+        return [...prev, currentTrack.artist];
+      }
+      return prev;
+    });
+
+    console.log(`Disliked & hid suggestion: "${currentTrack.title}" by ${currentTrack.artist}. Skipping...`);
+    
+    // Skip immediately
+    handleNextTrack();
+  };
+
+  const handleShuffleToggle = () => {
+    const isLikedContext = (currentView === "liked-songs" || activePlaybackContext === "liked");
+    setShuffleMode(prev => {
+      if (prev === 0) {
+        return 1; // standard shuffle
+      } else if (prev === 1) {
+        if (isLikedContext) {
+          return 2; // smart shuffle
+        } else {
+          return 0; // off
+        }
+      } else {
+        return 0; // off
+      }
+    });
   };
 
   const handlePrevTrack = () => {
@@ -1588,6 +1807,76 @@ export default function App() {
     localStorage.removeItem("spotify_last_volume");
     localStorage.removeItem("spotify_playback_history");
     localStorage.removeItem("spotify_playback_forward_history");
+  };
+
+  const handleSaveSpotifyCredentials = async (clientId: string, secret: string) => {
+    setSpotifyClientId(clientId);
+    setSpotifyClientSecret(secret);
+    
+    if (user && !user.isGuest) {
+      try {
+        const userDocRef = doc(db, "users", user.uid);
+        await setDoc(userDocRef, {
+          spotifyClientId: clientId,
+          spotifyClientSecret: secret
+        }, { merge: true });
+      } catch (err: any) {
+        console.error("Failed to save Spotify credentials to Firestore:", err);
+        setFirestoreError(`Erreur d'enregistrement des identifiants Spotify: ${err.message}`);
+      }
+    } else {
+      localStorage.setItem("spotify_client_id", clientId);
+      localStorage.setItem("spotify_client_secret", secret);
+    }
+  };
+
+  const handleImportSpotifyPlaylist = async (playlistUrl: string): Promise<Track[]> => {
+    const cleanId = playlistUrl.trim();
+    const match = cleanId.match(/(?:playlist\/|playlist:|^)([a-zA-Z0-9]{22})/);
+    const playlistId = match ? match[1] : cleanId;
+
+    if (!playlistId || playlistId.length !== 22) {
+      throw new Error("Lien de playlist invalide. Veuillez copier un lien de playlist Spotify valide (ex: https://open.spotify.com/playlist/...)");
+    }
+
+    const response = await fetch("/api/spotify/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        clientId: spotifyClientId,
+        clientSecret: spotifyClientSecret,
+        playlistId
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Erreur d'importation (${response.status})`);
+    }
+
+    const data = await response.json();
+    return data.tracks || [];
+  };
+
+  const handleSaveImportedTracks = async (tracks: Track[]) => {
+    if (!user) return;
+
+    if (user.isGuest) {
+      const updated = [...likedTracks];
+      tracks.forEach(track => {
+        if (!updated.some(t => t.id === track.id)) {
+          updated.push(track);
+        }
+      });
+      setLikedTracks(updated);
+    } else {
+      const tracksToSave = tracks.filter(track => !likedTracks.some(t => t.id === track.id));
+      const promises = tracksToSave.map(async (track) => {
+        const trackRef = doc(db, "users", user.uid, "likedTracks", track.id);
+        await setDoc(trackRef, track);
+      });
+      await Promise.all(promises);
+    }
   };
 
   if (loadingAuth || (user && !user.isGuest && checkingPassword)) {
@@ -2216,6 +2505,9 @@ export default function App() {
                   }
                 }}
                 onSelectArtist={handleSelectArtist}
+                onOpenSpotifyImport={() => setShowSpotifyImportModal(true)}
+                shuffleMode={shuffleMode}
+                onShuffleToggle={handleShuffleToggle}
               />
             )}
 
@@ -2229,6 +2521,8 @@ export default function App() {
                 onSelectArtist={handleSelectArtist}
                 onImportPlaylist={handleImportPlaylist}
                 isCurated={!customPlaylists.some(p => p.id === selectedPlaylist.id)}
+                shuffleMode={shuffleMode}
+                onShuffleToggle={handleShuffleToggle}
               />
             )}
 
@@ -2283,6 +2577,11 @@ export default function App() {
         isLiked={currentTrack ? likedTracks.some(t => t.id === currentTrack.id) : false}
         onLikeToggle={handleLikeToggle}
         onSelectArtist={handleSelectArtist}
+        shuffleMode={shuffleMode}
+        onShuffleToggle={handleShuffleToggle}
+        isLikedSongsContext={currentView === "liked-songs" || activePlaybackContext === "liked"}
+        isRecommendation={currentTrack?.isRecommendation || false}
+        onDislikeRecommendation={handleDislikeRecommendation}
       />
 
       {/* Create Custom Playlist Interactive Overlay Modal */}
@@ -2403,6 +2702,17 @@ export default function App() {
         onClose={() => setShowTasteSurvey(false)}
         onSubmit={handleTasteSurveySubmit}
         isGuest={user?.isGuest}
+      />
+
+      {/* Spotify Playlist Import Overlay */}
+      <SpotifyImportModal
+        isOpen={showSpotifyImportModal}
+        onClose={() => setShowSpotifyImportModal(false)}
+        spotifyClientId={spotifyClientId}
+        spotifyClientSecret={spotifyClientSecret}
+        onSaveCredentials={handleSaveSpotifyCredentials}
+        onImportPlaylist={handleImportSpotifyPlaylist}
+        onAddTracksToLiked={handleSaveImportedTracks}
       />
 
     </div>

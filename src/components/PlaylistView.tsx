@@ -1,5 +1,5 @@
 import React from "react";
-import { Play, Trash2, Music, Clock, Sparkles, Search, SlidersHorizontal, Check, ArrowUp, ArrowDown, X } from "lucide-react";
+import { Play, Trash2, Music, Clock, Sparkles, Search, SlidersHorizontal, Check, ArrowUp, ArrowDown, X, Shuffle } from "lucide-react";
 import { Track, Playlist } from "../types";
 import PlaylistCover from "./PlaylistCover";
 
@@ -13,6 +13,11 @@ interface PlaylistViewProps {
   onSelectArtist: (artistName: string) => void;
   onImportPlaylist?: (playlist: Playlist) => void;
   isCurated?: boolean;
+  onOpenSpotifyImport?: () => void;
+  
+  // Shuffle Mode Support
+  shuffleMode?: number;
+  onShuffleToggle?: () => void;
 }
 
 export default function PlaylistView({
@@ -24,7 +29,10 @@ export default function PlaylistView({
   onDeletePlaylist,
   onSelectArtist,
   onImportPlaylist,
-  isCurated = false
+  isCurated = false,
+  onOpenSpotifyImport,
+  shuffleMode = 0,
+  onShuffleToggle
 }: PlaylistViewProps) {
   
   const isLikedSongs = playlist === null;
@@ -120,18 +128,61 @@ export default function PlaylistView({
             <Sparkles className="w-4 h-4 fill-current text-black" /> Importer la Playlist
           </button>
         )}
+
+        {/* Transfer Spotify Playlist button (Liked Songs only) */}
+        {isLikedSongs && onOpenSpotifyImport && (
+          <button
+            id="transfer_spotify_playlist_btn"
+            onClick={onOpenSpotifyImport}
+            className="flex items-center gap-2 text-xs font-bold text-white hover:bg-[#1ed760]/20 bg-[#1DB954]/10 border border-[#1DB954]/40 hover:border-[#1DB954] rounded-full px-5 py-2.5 transition-all hover:scale-105 active:scale-95 self-end md:self-auto shrink-0 shadow-lg shadow-[#1db954]/5"
+          >
+            <Sparkles className="w-4 h-4 fill-current text-[#1DB954]" /> Transférer Spotify
+          </button>
+        )}
       </div>
 
       {/* 2. Control Play Bar */}
       <div className="p-6 md:p-8 flex items-center justify-between gap-6">
-        <button 
-          id="playlist_play_btn"
-          onClick={handlePlayAll}
-          disabled={sortedTracks.length === 0}
-          className="w-14 h-14 bg-[#1DB954] text-black rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl shadow-[#1db954]/10 disabled:opacity-45 disabled:pointer-events-none"
-        >
-          <Play className="w-6 h-6 text-black fill-current translate-x-[1px]" />
-        </button>
+        <div className="flex items-center gap-5">
+          <button 
+            id="playlist_play_btn"
+            onClick={handlePlayAll}
+            disabled={sortedTracks.length === 0}
+            className="w-14 h-14 bg-[#1DB954] text-black rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl shadow-[#1db954]/10 disabled:opacity-45 disabled:pointer-events-none"
+          >
+            <Play className="w-6 h-6 text-black fill-current translate-x-[1px]" />
+          </button>
+
+          {onShuffleToggle && (
+            <button
+              id="playlist_shuffle_btn"
+              onClick={onShuffleToggle}
+              disabled={sortedTracks.length === 0}
+              className={`relative p-3 rounded-full hover:bg-white/5 transition-all duration-200 disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center ${
+                shuffleMode === 1 || shuffleMode === 2 
+                  ? "text-[#1DB954] scale-105" 
+                  : "text-[#b3b3b3] hover:text-white"
+              }`}
+              title={
+                shuffleMode === 0 
+                  ? "Activer la lecture aléatoire" 
+                  : shuffleMode === 1 
+                    ? (isLikedSongs ? "Activer l'Aléatoire Intelligent (Smart Shuffle)" : "Désactiver la lecture aléatoire")
+                    : "Désactiver l'Aléatoire Intelligent (Smart Shuffle)"
+              }
+            >
+              <div className="relative">
+                <Shuffle className="w-6 h-6" />
+                {shuffleMode === 2 && (
+                  <Sparkles className="w-3 h-3 text-[#1DB954] absolute -top-1.5 -left-1.5 fill-current animate-pulse" />
+                )}
+              </div>
+              {(shuffleMode === 1 || shuffleMode === 2) && (
+                <span className="absolute bottom-1 w-1.5 h-1.5 bg-[#1DB954] rounded-full shadow-[0_0_4px_#1DB954]" />
+              )}
+            </button>
+          )}
+        </div>
 
         {/* Interactive Search, Sort & Density view bar */}
         <div className="flex items-center gap-3 relative shrink-0">

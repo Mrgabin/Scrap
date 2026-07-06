@@ -29,7 +29,7 @@ Lorsque l'application tourne à l'intérieur d'un bac à sable ou d'une iframe (
 L'interface a été conçue pour offrir un confort visuel optimal de jour comme de nuit :
 
 <div align="center">
-  <img src="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1000&q=80" alt="BeatStream Visual Concept" width="85%" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);" />
+  <img src="[https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format](https://i.pinimg.com/736x/ac/87/26/ac87267d9fc724c53d40cb536a45290b.jpg)&fit=crop&w=1000&q=80" alt="BeatStream Visual Concept" width="85%" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);" />
 </div>
 
 * **Thèmes Stellaires Multiples** : Voyagez entre l'arrière-plan interactif *Black Hole* (Trou Noir quantique), *Stable Singularity* (Singularité gravitationnelle apaisée), *Tectonic Lava* (Ambiance chaleureuse magmatique) et *Quantum Core* (Noyau technologique en mouvement).

@@ -1447,140 +1447,225 @@ function getGemini(): GoogleGenAI | null {
   return geminiClient;
 }
 
-// 3. AI Smart Recommendations ("Découvertes de la Semaine") API Endpoint
-app.post("/api/recommendations", async (req, res) => {
-  const { history, likes, followedArtists, searchHistory, tasteProfile } = req.body;
-  const recentTracks = Array.isArray(history) ? history.slice(0, 15) : [];
-  const userLikes = Array.isArray(likes) ? likes.slice(0, 15) : [];
-  const followed = Array.isArray(followedArtists) ? followedArtists.slice(0, 10) : [];
-  const searchHist = Array.isArray(searchHistory) ? searchHistory.slice(0, 10) : [];
-
-  const defaultSongs = [
+// Curated Popular/Trending Tracks Database grouped by genre for high-quality recommendations
+const POPULAR_GENRE_TRACKS: Record<string, { title: string; artist: string }[]> = {
+  rap: [
+    { title: "Bolide Allemand", artist: "SDM" },
+    { title: "La Vie Qu'on Mène", artist: "Ninho" },
+    { title: "DIE", artist: "Gazo" },
+    { title: "Meuda", artist: "Tiakola" },
+    { title: "Laboratoire", artist: "Werenoi" },
+    { title: "Demain", artist: "PLK" },
+    { title: "Tchikita", artist: "Jul" },
+    { title: "Lettre à une femme", artist: "Ninho" },
+    { title: "Moulaga", artist: "Heuss L'enfoiré" },
+    { title: "Feu de bois", artist: "Damso" },
+    { title: "On verra", artist: "Nekfeu" },
+    { title: "FE!N", artist: "Travis Scott" },
+    { title: "God's Plan", artist: "Drake" },
+    { title: "Doja", artist: "Central Cee" },
+    { title: "Lose Yourself", artist: "Eminem" }
+  ],
+  pop: [
     { title: "Blinding Lights", artist: "The Weeknd" },
-    { title: "Starboy", artist: "The Weeknd" },
-    { title: "Midnight City", artist: "M83" },
-    { title: "Intro", artist: "The xx" },
-    { title: "Sweater Weather", artist: "The Neighbourhood" },
+    { title: "As It Was", artist: "Harry Styles" },
+    { title: "Espresso", artist: "Sabrina Carpenter" },
+    { title: "LUNCH", artist: "Billie Eilish" },
+    { title: "Levitating", artist: "Dua Lipa" },
+    { title: "Beautiful Things", artist: "Benson Boone" },
+    { title: "Cruel Summer", artist: "Taylor Swift" },
+    { title: "Balance Ton Quoi", artist: "Angèle" },
+    { title: "La Grenade", artist: "Clara Luciani" },
+    { title: "Flowers", artist: "Miley Cyrus" },
+    { title: "Shape of You", artist: "Ed Sheeran" },
+    { title: "Save Your Tears", artist: "The Weeknd" },
+    { title: "Stay", artist: "The Kid LAROI & Justin Bieber" }
+  ],
+  electro: [
+    { title: "Get Lucky", artist: "Daft Punk ft. Pharrell Williams" },
+    { title: "Papaoutai", artist: "Stromae" },
+    { title: "I'm Good (Blue)", artist: "David Guetta & Bebe Rexha" },
+    { title: "Nanana", artist: "Peggy Gou" },
+    { title: "leavemealone", artist: "Fred again.." },
+    { title: "One Kiss", artist: "Calvin Harris & Dua Lipa" },
+    { title: "Let Me Love You", artist: "DJ Snake" },
+    { title: "Nightcall", artist: "Kavinsky" },
+    { title: "Alors On Danse", artist: "Stromae" },
+    { title: "One More Time", artist: "Daft Punk" },
+    { title: "Love Tonight", artist: "Shouse" }
+  ],
+  rock: [
+    { title: "Believer", artist: "Imagine Dragons" },
+    { title: "Viva La Vida", artist: "Coldplay" },
+    { title: "Smells Like Teen Spirit", artist: "Nirvana" },
+    { title: "The Emptiness Machine", artist: "Linkin Park" },
     { title: "Do I Wanna Know?", artist: "Arctic Monkeys" },
-    { title: "Riptide", artist: "Vance Joy" },
-    { title: "Instant Crush", artist: "Daft Punk" }
+    { title: "Beggin'", artist: "Måneskin" },
+    { title: "Another One Bites The Dust", artist: "Queen" },
+    { title: "Back In Black", artist: "AC/DC" },
+    { title: "Creep", artist: "Radiohead" },
+    { title: "Sweet Child O' Mine", artist: "Guns N' Roses" }
+  ],
+  lofi: [
+    { title: "Snowman", artist: "Lofi Girl" },
+    { title: "Chill Lofi Beats", artist: "Keep Calm" },
+    { title: "Sweet Dreams (Lofi)", artist: "Dreamscape" },
+    { title: "Rainy Night in Tokyo", artist: "Lofi Sleep" },
+    { title: "Affection", artist: "Jinsang" },
+    { title: "Feather", artist: "Nujabes" },
+    { title: "Spike Spiegel", artist: "saib" }
+  ]
+};
+
+// Genre analyzer based on track metadata
+function detectGenreOfTracks(tracks: any[]): string {
+  if (!Array.isArray(tracks) || tracks.length === 0) {
+    return "pop";
+  }
+
+  const rapKeywords = [
+    "jul", "ninho", "gazo", "tiakola", "werenoi", "plk", "damso", "nekfeu", "booba", "sch", "pnl", "orelsan", 
+    "lomepal", "soprano", "aya nakamura", "eminem", "drake", "juice wrld", "50 cent", "central cee", "travis scott", 
+    "gunna", "sdm", "rap", "hip-hop", "hip hop", "trap", "freestyle", "koba", "heuss", "gims", "rnb", "soul"
+  ];
+  
+  const electroKeywords = [
+    "daft punk", "stromae", "david guetta", "peggy gou", "fred again", "calvin harris", "kavinsky", "dj snake", 
+    "shouse", "electro", "techno", "house", "edm", "dance", "ofenbach", "garrix", "martin garrix"
+  ];
+  
+  const rockKeywords = [
+    "queen", "nirvana", "ac/dc", "coldplay", "imagine dragons", "guns n' roses", "linkin park", "arctic monkeys", 
+    "måneskin", "radiohead", "red hot", "chili peppers", "rock", "metal", "grunge", "indie", "alternative"
+  ];
+  
+  const lofiKeywords = [
+    "lofi", "chill", "relax", "study", "sleep", "ambient", "jinsang", "nujabes", "saib"
   ];
 
-  let recommendedList: { title: string; artist: string }[] = [];
+  let rapCount = 0;
+  let electroCount = 0;
+  let rockCount = 0;
+  let lofiCount = 0;
+  let popCount = 0;
 
-  const ai = getGemini();
-  const hasPreferences = recentTracks.length > 0 || userLikes.length > 0 || followed.length > 0 || searchHist.length > 0 || tasteProfile;
+  tracks.forEach(track => {
+    if (!track) return;
+    const title = String(track.title || "").toLowerCase();
+    const artist = String(track.artist || "").toLowerCase();
+    const combined = `${title} ${artist}`;
 
-  if (ai && hasPreferences) {
-    let prompt = `You are the core AI recommendation engine for our Spotify-like application, mimicking Spotify's famous "Discover Weekly" algorithm. 
-Analyze the user's detailed musical tastes below and suggest exactly 8 new, cool songs and artists that perfectly align with their style, but provide a fresh discovery experience. Do not repeat songs already in their likes or history.
-
-Here is the user's profile and taste data:`;
-
-    if (recentTracks.length > 0) {
-      prompt += `\n- Recently played songs:\n${recentTracks.map(h => `  * "${h.title}" by ${h.artist}`).join("\n")}`;
+    let matched = false;
+    if (rapKeywords.some(keyword => combined.includes(keyword))) {
+      rapCount++;
+      matched = true;
     }
-    if (userLikes.length > 0) {
-      prompt += `\n- Liked / Favorite songs:\n${userLikes.map(l => `  * "${l.title}" by ${l.artist}`).join("\n")}`;
+    if (electroKeywords.some(keyword => combined.includes(keyword))) {
+      electroCount++;
+      matched = true;
     }
-    if (followed.length > 0) {
-      prompt += `\n- Followed Artists: ${followed.join(", ")}`;
+    if (rockKeywords.some(keyword => combined.includes(keyword))) {
+      rockCount++;
+      matched = true;
     }
-    if (searchHist.length > 0) {
-      const activeSearches = searchHist.filter((s: any) => s.name || s.title).map((s: any) => s.name || s.title);
-      if (activeSearches.length > 0) {
-        prompt += `\n- Recent search queries or clicks: ${activeSearches.join(", ")}`;
-      }
+    if (lofiKeywords.some(keyword => combined.includes(keyword))) {
+      lofiCount++;
+      matched = true;
     }
-    if (tasteProfile) {
-      prompt += `\n- Stated Taste Profile:`;
-      if (Array.isArray(tasteProfile.genres) && tasteProfile.genres.length > 0) {
-        prompt += `\n  * Favorite Genres: ${tasteProfile.genres.join(", ")}`;
-      }
-      if (Array.isArray(tasteProfile.moods) && tasteProfile.moods.length > 0) {
-        prompt += `\n  * Target Moods: ${tasteProfile.moods.join(", ")}`;
-      }
-      if (tasteProfile.tempo) {
-        prompt += `\n  * Preferred Tempo: ${tasteProfile.tempo}`;
-      }
-      if (Array.isArray(tasteProfile.epochs) && tasteProfile.epochs.length > 0) {
-        prompt += `\n  * Preferred Music Eras: ${tasteProfile.epochs.join(", ")}`;
-      }
+    
+    if (!matched) {
+      popCount++;
     }
+  });
 
-    prompt += `\n\nGenerate exactly 8 song suggestions. Be diverse but highly relevant to their tastes.
-Respond strictly with a JSON array of objects, with each object having exact keys "title" and "artist". No other text, no markdown wrappers, no conversational pre/postamble.
+  const max = Math.max(rapCount, electroCount, rockCount, lofiCount, popCount);
+  if (max === rapCount && rapCount > 0) return "rap";
+  if (max === electroCount && electroCount > 0) return "electro";
+  if (max === rockCount && rockCount > 0) return "rock";
+  if (max === lofiCount && lofiCount > 0) return "lofi";
+  return "pop";
+}
 
-Example format:
-[
-  {"title": "Song Name", "artist": "Artist Name"}
-]`;
+// 3. AI Smart Recommendations ("Découvertes de la Semaine") API Endpoint
+app.post("/api/recommendations", async (req, res) => {
+  const { history, likes, followedArtists, searchHistory, tasteProfile, currentTracks } = req.body;
+  const recentTracks = Array.isArray(history) ? history.slice(0, 15) : [];
+  const userLikes = Array.isArray(likes) ? likes.slice(0, 15) : [];
+  const activeTracks = Array.isArray(currentTracks) ? currentTracks : [];
 
-    try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
-        contents: prompt,
-      });
-
-      const text = response.text || "[]";
-      const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
-      recommendedList = JSON.parse(cleanText);
-    } catch (err) {
-      logQuietGeminiError("Gemini suggestion failed, falling back to rule-based logic", err);
-      handleGeminiError(err);
+  // Determine dominant genre from current playing tracks/queue, or fallback to likes / history
+  let detectedGenre = "pop";
+  if (activeTracks.length > 0) {
+    detectedGenre = detectGenreOfTracks(activeTracks);
+  } else if (userLikes.length > 0) {
+    detectedGenre = detectGenreOfTracks(userLikes);
+  } else if (recentTracks.length > 0) {
+    detectedGenre = detectGenreOfTracks(recentTracks);
+  } else if (tasteProfile && Array.isArray(tasteProfile.genres) && tasteProfile.genres.length > 0) {
+    // Stated taste profile fallback
+    const primaryStated = String(tasteProfile.genres[0]).toLowerCase();
+    if (["rap", "pop", "electro", "rock", "lofi"].includes(primaryStated)) {
+      detectedGenre = primaryStated;
     }
   }
 
-  // Fallback Rule-based logic if Gemini is absent, fails, or user is completely brand new with zero tastes
-  if (recommendedList.length === 0) {
-    const tastes: { title: string; artist: string }[] = [];
-    
-    const knownArtists = new Set<string>();
-    if (Array.isArray(followed)) {
-      followed.forEach(a => { if (typeof a === 'string') knownArtists.add(a); });
-    }
-    if (Array.isArray(userLikes)) {
-      userLikes.forEach(l => { if (l && l.artist) knownArtists.add(l.artist); });
-    }
-    if (Array.isArray(recentTracks)) {
-      recentTracks.forEach(h => { if (h && h.artist) knownArtists.add(h.artist); });
-    }
+  console.log(`[Smart Shuffle] Detected dominant genre: "${detectedGenre}" for recommendations calculation.`);
 
-    const uniqueArtists = Array.from(knownArtists);
+  // Get curated candidates for this genre
+  const candidates = POPULAR_GENRE_TRACKS[detectedGenre] || POPULAR_GENRE_TRACKS.pop;
 
-    if (uniqueArtists.length > 0) {
-      uniqueArtists.slice(0, 4).forEach((artist, idx) => {
-        const tracksForArtist = [
-          "Special Track",
-          "Essentials",
-          "Remix Selection",
-          "Unplugged Session"
-        ];
-        tastes.push({ title: `${tracksForArtist[idx % 4]}`, artist });
+  // Filter out any candidates that are already present in user's likes, playlist/activeTracks, or history
+  const isAlreadyPresent = (cand: { title: string; artist: string }) => {
+    const cleanCandTitle = cand.title.toLowerCase().trim();
+    const cleanCandArtist = cand.artist.toLowerCase().trim();
+
+    const matchInList = (list: any[]) => {
+      if (!Array.isArray(list)) return false;
+      return list.some(t => {
+        if (!t) return false;
+        const tTitle = String(t.title || "").toLowerCase().trim();
+        const tArtist = String(t.artist || "").toLowerCase().trim();
+        return tTitle.includes(cleanCandTitle) || cleanCandTitle.includes(tTitle) || 
+               (tArtist.includes(cleanCandArtist) && tTitle.includes(cleanCandTitle));
       });
-    }
+    };
 
-    const filler = [
+    return matchInList(activeTracks) || matchInList(userLikes) || matchInList(recentTracks);
+  };
+
+  // Build filtered list of non-duplicated tracks
+  let filteredList = candidates.filter(cand => !isAlreadyPresent(cand));
+
+  // If we ran out of tracks in the dominant genre because the user already knows all of them,
+  // we fall back to other genres, keeping the exclusion filter active!
+  if (filteredList.length < 8) {
+    const otherGenres = Object.keys(POPULAR_GENRE_TRACKS).filter(g => g !== detectedGenre);
+    for (const otherG of otherGenres) {
+      const extraCandidates = POPULAR_GENRE_TRACKS[otherG];
+      const extraFiltered = extraCandidates.filter(cand => !isAlreadyPresent(cand));
+      filteredList = [...filteredList, ...extraFiltered];
+      if (filteredList.length >= 12) break;
+    }
+  }
+
+  // Shuffle the selection to make it dynamic and fun
+  const shuffledList = [...filteredList].sort(() => 0.5 - Math.random());
+
+  // Pick exactly 8 songs
+  const recommendedList = shuffledList.slice(0, 8);
+
+  // If still empty (extremely rare fallback), use defaultSongs but make sure we do not fail
+  if (recommendedList.length === 0) {
+    recommendedList.push(
       { title: "Blinding Lights", artist: "The Weeknd" },
       { title: "Sweater Weather", artist: "The Neighbourhood" },
       { title: "Riptide", artist: "Vance Joy" },
       { title: "Instant Crush", artist: "Daft Punk" },
       { title: "Midnight City", artist: "M83" },
-      { title: "Nightcall", artist: "Kavinsky" },
       { title: "Do I Wanna Know?", artist: "Arctic Monkeys" },
-      { title: "Stolen Dance", artist: "Milky Chance" }
-    ];
-
-    while (tastes.length < 8) {
-      const nextFiller = filler[tastes.length % filler.length];
-      if (!tastes.some(t => t.title === nextFiller.title && t.artist === nextFiller.artist)) {
-        tastes.push(nextFiller);
-      } else {
-        tastes.push({ ...nextFiller, title: nextFiller.title + " " });
-      }
-    }
-
-    recommendedList = tastes.slice(0, 8);
+      { title: "Lose Yourself", artist: "Eminem" },
+      { title: "Shape of You", artist: "Ed Sheeran" }
+    );
   }
 
   try {

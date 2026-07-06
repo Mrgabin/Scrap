@@ -851,13 +851,14 @@ export default function App() {
     return () => clearInterval(interval);
   }, [user, recommendationTimestamp, recommendations.length]);
 
-  const calculateRecommendations = async () => {
+  const calculateRecommendations = async (tracksToAnalyze?: Track[]) => {
     if (!user) return;
     setLoadingRecommendations(true);
     try {
       // Map user preferences and history for highly precise AI recommendations
       const simplifiedHistory = recentTracks.map(t => ({ title: t.title, artist: t.artist }));
       const simplifiedLikes = likedTracks.map(t => ({ title: t.title, artist: t.artist }));
+      const currentList = tracksToAnalyze || playQueue;
       
       const res = await fetch("/api/recommendations", {
         method: "POST",
@@ -867,7 +868,8 @@ export default function App() {
           likes: simplifiedLikes,
           followedArtists: followedArtists,
           searchHistory: searchHistory,
-          tasteProfile: tasteProfile
+          tasteProfile: tasteProfile,
+          currentTracks: currentList.map(t => ({ title: t.title, artist: t.artist }))
         })
       });
       if (!res.ok) {
@@ -1008,9 +1010,15 @@ export default function App() {
       setPlayQueue(contextList);
       const idx = contextList.findIndex(t => t.id === track.id);
       setQueueIndex(idx !== -1 ? idx : 0);
+      if (shuffleMode === 2 && (contextType === "liked" || currentView === "liked-songs")) {
+        calculateRecommendations(contextList);
+      }
     } else {
       setPlayQueue([track]);
       setQueueIndex(0);
+      if (shuffleMode === 2 && (contextType === "liked" || currentView === "liked-songs")) {
+        calculateRecommendations([track]);
+      }
     }
 
     if (currentView === "search") {
@@ -1221,34 +1229,31 @@ export default function App() {
         setPlayTrigger(Date.now());
 
       } else if (shuffleMode === 2 && (activePlaybackContext === "liked" || currentView === "liked-songs")) {
-        // --- 2. Smart Shuffle (Lecture Aléatoire Intelligente) ---
-        const nextCount = smartShuffleCount + 1;
-        setSmartShuffleCount(nextCount);
-
-        // Spotify "1 for 3" ratio: every 4th song (index % 4 === 3) is a recommendation
-        const isRecommendationTurn = nextCount % 4 === 3;
-
-        // Filter recommendations based on negative feedback (disliked artists/titles)
+        // --- 2. Smart Shuffle (Lecture Aléatoire Intelligente / Mode IA) ---
+        // Play EXCLUSIVELY from the generated recommendations list (mood matching but never the same as playlist)
         const eligibleRecommendations = recommendations.filter(rec => {
           const notDisliked = !smartShuffleDislikes.some(dis => 
             rec.artist.toLowerCase() === dis.toLowerCase() || 
             rec.title.toLowerCase() === dis.toLowerCase()
           );
-          const notLikedAlready = !likedTracks.some(lt => lt.id === rec.id || lt.title === rec.title);
-          return notDisliked && notLikedAlready;
+          const notPlayedInSession = !shufflePlayedIds.includes(rec.id);
+          // And must not be in our likedTracks/playQueue (already handled by API, but extra safety check)
+          const notInPlaylist = !playQueue.some(t => !t.isRecommendation && (t.id === rec.id || t.title.toLowerCase() === rec.title.toLowerCase()));
+          return notDisliked && notPlayedInSession && notInPlaylist;
         });
 
-        if (isRecommendationTurn && eligibleRecommendations.length > 0) {
-          // Play a recommendation!
+        if (eligibleRecommendations.length > 0) {
           const chosenRec = eligibleRecommendations[Math.floor(Math.random() * eligibleRecommendations.length)];
           const recommendationTrack = { ...chosenRec, isRecommendation: true };
 
-          // Insert recommendation in playQueue right after current index to visualize it cleanly
+          // Append to playQueue and set index to it, so user can see it in their queue
           const updatedQueue = [...playQueue];
           const insertIdx = queueIndex + 1;
           updatedQueue.splice(insertIdx, 0, recommendationTrack);
+          
           setPlayQueue(updatedQueue);
           setQueueIndex(insertIdx);
+          setShufflePlayedIds(prev => [...prev, recommendationTrack.id]);
 
           setInitialStartTime(0);
           setCurrentTime(0);
@@ -1257,31 +1262,26 @@ export default function App() {
           setCurrentTrack(recommendationTrack);
           setIsPlaying(true);
           setPlayTrigger(Date.now());
-          console.log(`Smart Shuffle: Injected recommendation "${recommendationTrack.title}" by ${recommendationTrack.artist}.`);
+          console.log(`Mode IA: Played recommendation "${recommendationTrack.title}" by ${recommendationTrack.artist}.`);
         } else {
-          // Play a random song from the user's Liked list (normal shuffle within likes)
-          const sourceTracks = likedTracks.length > 0 ? likedTracks : playQueue;
-          let eligibleTracks = sourceTracks.filter(t => !shufflePlayedIds.includes(t.id));
+          // If we played all recommendations, fetch fresh recommendations and fallback temporarily to normal shuffle
+          console.log("No more unplayed recommendations, fetching fresh ones.");
+          calculateRecommendations();
+          
+          // Temporary fallback to standard shuffle
+          let eligibleTracks = playQueue.filter(t => !shufflePlayedIds.includes(t.id));
           if (eligibleTracks.length === 0) {
-            eligibleTracks = sourceTracks.filter(t => t.id !== currentTrack?.id);
-            if (eligibleTracks.length === 0) eligibleTracks = sourceTracks;
+            eligibleTracks = playQueue.filter(t => t.id !== currentTrack?.id);
+            if (eligibleTracks.length === 0) eligibleTracks = playQueue;
             setShufflePlayedIds([currentTrack?.id || ""]);
           }
 
           const randomTrack = eligibleTracks[Math.floor(Math.random() * eligibleTracks.length)];
-          
-          // Make sure it is in our active queue
-          let nextIdx = playQueue.findIndex(t => t.id === randomTrack.id);
-          if (nextIdx === -1) {
-            // Append to queue if missing
-            const updatedQueue = [...playQueue, randomTrack];
-            setPlayQueue(updatedQueue);
-            nextIdx = updatedQueue.length - 1;
-          }
+          const nextIdx = playQueue.findIndex(t => t.id === randomTrack.id);
 
           setShufflePlayedIds(prev => [...prev, randomTrack.id]);
-          setQueueIndex(nextIdx);
-
+          setQueueIndex(nextIdx !== -1 ? nextIdx : 0);
+          
           setInitialStartTime(0);
           setCurrentTime(0);
           setSeekTo(0);
@@ -1328,17 +1328,47 @@ export default function App() {
   const handleShuffleToggle = () => {
     const isLikedContext = (currentView === "liked-songs" || activePlaybackContext === "liked");
     setShuffleMode(prev => {
+      let nextMode = 0;
       if (prev === 0) {
-        return 1; // standard shuffle
+        nextMode = 1; // standard shuffle
       } else if (prev === 1) {
         if (isLikedContext) {
-          return 2; // smart shuffle
+          nextMode = 2; // smart shuffle
         } else {
-          return 0; // off
+          nextMode = 0; // off
         }
       } else {
-        return 0; // off
+        nextMode = 0; // off
       }
+
+      // If we are leaving mode 2 (Smart Shuffle/AI), clean up the playQueue by removing any recommendations
+      if (prev === 2 && nextMode !== 2) {
+        setTimeout(() => {
+          setPlayQueue(currentQueue => {
+            const cleaned = currentQueue.filter(t => !t.isRecommendation);
+            
+            // Adjust queueIndex so it doesn't go out of bounds
+            setQueueIndex(prevIdx => {
+              const currentTrk = currentTrack;
+              if (currentTrk) {
+                const newIdx = cleaned.findIndex(t => t.id === currentTrk.id);
+                return newIdx !== -1 ? newIdx : 0;
+              }
+              return prevIdx >= cleaned.length ? Math.max(0, cleaned.length - 1) : prevIdx;
+            });
+            return cleaned;
+          });
+        }, 10);
+      }
+
+      // If we are entering mode 2, proactively fetch recommendations based on the current playlist/active tracks!
+      if (nextMode === 2) {
+        setTimeout(() => {
+          calculateRecommendations();
+        }, 10);
+      }
+
+      return nextMode;
     });
   };
 

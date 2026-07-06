@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, linkWithCredential, EmailAuthProvider } from "firebase/auth";
 import { 
   collection, 
   doc, 
@@ -1419,24 +1419,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-black flex flex-col justify-center items-center text-white font-sans select-none">
         <div className="w-16 h-16 animate-bounce mb-5 flex items-center justify-center filter drop-shadow-[0_0_12px_rgba(29,185,84,0.4)]">
-          <svg viewBox="0 0 100 100" className="w-full h-full fill-none animate-pulse" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <linearGradient id="scrap-logo-grad-loading" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#1DB954" />
-                <stop offset="100%" stopColor="#1ed760" />
-              </linearGradient>
-              <filter id="loading-glow" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="3" result="blur" />
-                <feComposite in="SourceGraphic" in2="blur" operator="over" />
-              </filter>
-            </defs>
-            <circle cx="50" cy="50" r="45" fill="#0c0c14" stroke="url(#scrap-logo-grad-loading)" strokeWidth="3" />
-            <path d="M 65 32 C 60 25, 40 25, 35 32 C 30 40, 45 45, 55 50 C 65 55, 70 65, 65 72 C 60 80, 40 80, 35 72" fill="none" stroke="url(#scrap-logo-grad-loading)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" filter="url(#loading-glow)" />
-            <line x1="22" y1="50" x2="28" y2="50" stroke="url(#scrap-logo-grad-loading)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
-            <line x1="72" y1="50" x2="78" y2="50" stroke="url(#scrap-logo-grad-loading)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
-            <line x1="50" y1="18" x2="50" y2="24" stroke="url(#scrap-logo-grad-loading)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
-            <line x1="50" y1="76" x2="50" y2="82" stroke="url(#scrap-logo-grad-loading)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
-          </svg>
+          <img src="/icon.svg" className="w-full h-full object-contain animate-pulse" alt="Scrap Logo" referrerPolicy="no-referrer" />
         </div>
         <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400">
           {loadingAuth ? "Initialisation sécurisée Firebase..." : "Sécurisation de la session..."}
@@ -1472,6 +1455,17 @@ export default function App() {
           createdAt: new Date().toISOString()
         });
         
+        // Link Email/Password credential so user can log in via E-mail + Password with this password too!
+        if (user.email) {
+          try {
+            const credential = EmailAuthProvider.credential(user.email, passwordSetupInput);
+            await linkWithCredential(user, credential);
+            console.log("Successfully linked email/password provider during setup!");
+          } catch (linkErr: any) {
+            console.warn("Could not link email/password credential:", linkErr);
+          }
+        }
+        
         setCorrectPassword(passwordSetupInput);
         setHasPasswordInDb(true);
         setIsPasswordVerified(true);
@@ -1489,7 +1483,7 @@ export default function App() {
       }
     };
 
-    const handleVerifyPassword = (e: React.FormEvent) => {
+    const handleVerifyPassword = async (e: React.FormEvent) => {
       e.preventDefault();
       setPasswordError("");
       
@@ -1499,6 +1493,19 @@ export default function App() {
       }
       
       if (passwordVerifyInput === correctPassword) {
+        // Automatically link Email/Password provider if it's missing
+        const hasEmailPasswordProvider = user.providerData?.some(
+          (p: any) => p.providerId === "password"
+        );
+        if (!hasEmailPasswordProvider && user.email) {
+          try {
+            const credential = EmailAuthProvider.credential(user.email, passwordVerifyInput);
+            await linkWithCredential(user, credential);
+            console.log("Successfully linked email/password provider during verification!");
+          } catch (linkErr: any) {
+            console.warn("Could not link email/password credential during verification:", linkErr);
+          }
+        }
         setIsPasswordVerified(true);
         setPasswordError("");
       } else {
@@ -1515,24 +1522,7 @@ export default function App() {
           {/* Logo */}
           <div className="flex flex-col items-center mb-8">
             <div className="w-20 h-20 mb-4 filter drop-shadow-[0_4px_16px_rgba(29,185,84,0.3)] hover:scale-105 transition-transform duration-300 flex items-center justify-center">
-              <svg viewBox="0 0 100 100" className="w-full h-full fill-none" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                  <linearGradient id="scrap-logo-grad-pwd" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#1DB954" />
-                    <stop offset="100%" stopColor="#1ed760" />
-                  </linearGradient>
-                  <filter id="pwd-glow" x="-20%" y="-20%" width="140%" height="140%">
-                    <feGaussianBlur stdDeviation="3" result="blur" />
-                    <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                  </filter>
-                </defs>
-                <circle cx="50" cy="50" r="45" fill="#0c0c14" stroke="url(#scrap-logo-grad-pwd)" strokeWidth="3" />
-                <path d="M 65 32 C 60 25, 40 25, 35 32 C 30 40, 45 45, 55 50 C 65 55, 70 65, 65 72 C 60 80, 40 80, 35 72" fill="none" stroke="url(#scrap-logo-grad-pwd)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" filter="url(#pwd-glow)" />
-                <line x1="22" y1="50" x2="28" y2="50" stroke="url(#scrap-logo-grad-pwd)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
-                <line x1="72" y1="50" x2="78" y2="50" stroke="url(#scrap-logo-grad-pwd)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
-                <line x1="50" y1="18" x2="50" y2="24" stroke="url(#scrap-logo-grad-pwd)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
-                <line x1="50" y1="76" x2="50" y2="82" stroke="url(#scrap-logo-grad-pwd)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
-              </svg>
+              <img src="/icon.svg" className="w-full h-full object-contain" alt="Scrap Logo" referrerPolicy="no-referrer" />
             </div>
             <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-1">
               Scrap<span className="text-[#1DB954] text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-white/10 ml-2">SÉCURITÉ</span>

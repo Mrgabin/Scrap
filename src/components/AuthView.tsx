@@ -10,6 +10,8 @@ import {
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import { Music, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
+// @ts-ignore
+import authLogo from "../assets/images/regenerated_image_1783349785962.png";
 
 interface AuthViewProps {
   onGuestLogin: () => void;
@@ -154,6 +156,8 @@ export default function AuthView({ onGuestLogin }: AuthViewProps) {
           setError("Adresse e-mail invalide.");
         } else if (err.code === "auth/weak-password") {
           setError("Le mot de passe doit de préférence contenir au moins 6 caractères.");
+        } else if (err.code === "auth/operation-not-allowed") {
+          setError("La méthode de connexion par E-mail/Mot de passe n'est pas activée pour votre projet Firebase. Veuillez l'activer dans la console Firebase (Authentication > Mode de connexion) : https://console.firebase.google.com/project/scrap-a2ab8/authentication/providers");
         } else {
           setError(err.message || "Une erreur est survenue lors de la création du compte.");
         }
@@ -189,6 +193,8 @@ export default function AuthView({ onGuestLogin }: AuthViewProps) {
           setError("Adresse e-mail ou mot de passe incorrect.");
         } else if (err.code === "auth/invalid-email") {
           setError("Adresse e-mail invalide.");
+        } else if (err.code === "auth/operation-not-allowed") {
+          setError("La méthode de connexion par E-mail/Mot de passe n'est pas activée pour votre projet Firebase. Veuillez l'activer dans la console Firebase (Authentication > Mode de connexion) : https://console.firebase.google.com/project/scrap-a2ab8/authentication/providers");
         } else {
           setError(err.message || "Une erreur est survenue lors de la connexion.");
         }
@@ -202,24 +208,7 @@ export default function AuthView({ onGuestLogin }: AuthViewProps) {
     return (
       <div className="min-h-screen bg-black flex flex-col justify-center items-center text-white font-sans select-none">
         <div className="w-20 h-20 animate-pulse mb-6 flex items-center justify-center filter drop-shadow-[0_0_12px_rgba(29,185,84,0.5)]">
-          <svg viewBox="0 0 100 100" className="w-full h-full fill-none" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <linearGradient id="scrap-logo-grad-1" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#1DB954" />
-                <stop offset="100%" stopColor="#1ed760" />
-              </linearGradient>
-              <filter id="auth-glow-1" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="3" result="blur" />
-                <feComposite in="SourceGraphic" in2="blur" operator="over" />
-              </filter>
-            </defs>
-            <circle cx="50" cy="50" r="45" fill="#0c0c14" stroke="url(#scrap-logo-grad-1)" strokeWidth="3" />
-            <path d="M 65 32 C 60 25, 40 25, 35 32 C 30 40, 45 45, 55 50 C 65 55, 70 65, 65 72 C 60 80, 40 80, 35 72" fill="none" stroke="url(#scrap-logo-grad-1)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" filter="url(#auth-glow-1)" />
-            <line x1="22" y1="50" x2="28" y2="50" stroke="url(#scrap-logo-grad-1)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
-            <line x1="72" y1="50" x2="78" y2="50" stroke="url(#scrap-logo-grad-1)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
-            <line x1="50" y1="18" x2="50" y2="24" stroke="url(#scrap-logo-grad-1)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
-            <line x1="50" y1="76" x2="50" y2="82" stroke="url(#scrap-logo-grad-1)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
-          </svg>
+          <img src="/icon.svg" className="w-full h-full object-contain animate-pulse" alt="Scrap Logo" referrerPolicy="no-referrer" />
         </div>
         <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400">
           Vérification de la session Google...
@@ -235,24 +224,7 @@ export default function AuthView({ onGuestLogin }: AuthViewProps) {
         {/* Logo Head */}
         <div className="flex flex-col items-center mb-6">
           <div className="w-20 h-20 mb-3 filter drop-shadow-[0_4px_16px_rgba(29,185,84,0.4)] hover:scale-105 transition-transform duration-300 flex items-center justify-center">
-            <svg viewBox="0 0 100 100" className="w-full h-full fill-none" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <linearGradient id="scrap-logo-grad-2" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#1DB954" />
-                  <stop offset="100%" stopColor="#1ed760" />
-                </linearGradient>
-                <filter id="auth-glow-2" x="-20%" y="-20%" width="140%" height="140%">
-                  <feGaussianBlur stdDeviation="3" result="blur" />
-                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                </filter>
-              </defs>
-              <circle cx="50" cy="50" r="45" fill="#0c0c14" stroke="url(#scrap-logo-grad-2)" strokeWidth="3" />
-              <path d="M 65 32 C 60 25, 40 25, 35 32 C 30 40, 45 45, 55 50 C 65 55, 70 65, 65 72 C 60 80, 40 80, 35 72" fill="none" stroke="url(#scrap-logo-grad-2)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" filter="url(#auth-glow-2)" />
-              <line x1="22" y1="50" x2="28" y2="50" stroke="url(#scrap-logo-grad-2)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
-              <line x1="72" y1="50" x2="78" y2="50" stroke="url(#scrap-logo-grad-2)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
-              <line x1="50" y1="18" x2="50" y2="24" stroke="url(#scrap-logo-grad-2)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
-              <line x1="50" y1="76" x2="50" y2="82" stroke="url(#scrap-logo-grad-2)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
-            </svg>
+            <img src={authLogo} className="w-full h-full object-contain" alt="Scrap Logo" referrerPolicy="no-referrer" />
           </div>
           <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-1">
             Scrap<span className="text-[#1DB954] text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-white/10 ml-2">APP</span>

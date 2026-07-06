@@ -14,6 +14,8 @@ import { Playlist, Track } from "../types";
 import { auth } from "../firebase";
 import PlaylistCover from "./PlaylistCover";
 import { getDeterministicArtistAvatar } from "../lib/avatarHelper";
+// @ts-ignore
+import scrapLogo from "../assets/images/regenerated_image_1783349595383.png";
 
 interface SidebarProps {
   currentView: string;
@@ -54,24 +56,7 @@ export default function Sidebar({
         className="bg-[#0a0a14]/30 backdrop-blur-md rounded-lg p-5 flex items-center gap-3 border border-white/5 shadow-xl cursor-pointer hover:bg-white/[0.02] transition-all group"
       >
         <div className="w-10 h-10 group-hover:scale-105 transition-all flex items-center justify-center filter drop-shadow-[0_2px_8px_rgba(29,185,84,0.3)]">
-          <svg viewBox="0 0 100 100" className="w-full h-full fill-none" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <linearGradient id="sidebar-logo-grad-real" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#1DB954" />
-                <stop offset="100%" stopColor="#1ed760" />
-              </linearGradient>
-              <filter id="sidebar-glow" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="3" result="blur" />
-                <feComposite in="SourceGraphic" in2="blur" operator="over" />
-              </filter>
-            </defs>
-            <circle cx="50" cy="50" r="45" fill="#0c0c14" stroke="url(#sidebar-logo-grad-real)" strokeWidth="3" />
-            <path d="M 65 32 C 60 25, 40 25, 35 32 C 30 40, 45 45, 55 50 C 65 55, 70 65, 65 72 C 60 80, 40 80, 35 72" fill="none" stroke="url(#sidebar-logo-grad-real)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" filter="url(#sidebar-glow)" />
-            <line x1="22" y1="50" x2="28" y2="50" stroke="url(#sidebar-logo-grad-real)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
-            <line x1="72" y1="50" x2="78" y2="50" stroke="url(#sidebar-logo-grad-real)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
-            <line x1="50" y1="18" x2="50" y2="24" stroke="url(#sidebar-logo-grad-real)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
-            <line x1="50" y1="76" x2="50" y2="82" stroke="url(#sidebar-logo-grad-real)" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
-          </svg>
+          <img src={scrapLogo} className="w-full h-full object-contain" alt="Scrap Logo" referrerPolicy="no-referrer" />
         </div>
         <div>
           <span className="font-black text-lg tracking-tight text-white flex items-center gap-1">

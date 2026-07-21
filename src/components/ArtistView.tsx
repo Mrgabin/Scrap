@@ -375,7 +375,7 @@ export default function ArtistView({
   ];
 
   return (
-    <div className="h-full overflow-y-auto text-white select-none pb-20" id="artist_profile_view">
+    <div className="h-full overflow-y-auto text-white select-none pb-36 md:pb-28" id="artist_profile_view">
       
       {/* 1. Jumbotron Header Banner with circular avatar and stable metrics */}
       <div 

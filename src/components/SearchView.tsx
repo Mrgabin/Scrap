@@ -328,7 +328,7 @@ export default function SearchView({
   };
 
   return (
-    <div className="p-6 overflow-y-auto h-full text-white bg-black font-sans" id="search_view">
+    <div className="p-3 sm:p-6 pb-36 md:pb-28 overflow-y-auto h-full text-white bg-black font-sans" id="search_view">
       
       {/* Horizontally scrollable row of filters */}
       <div className="flex gap-2.5 overflow-x-auto pb-4 scrollbar-hide shrink-0" id="search_filters_bar">

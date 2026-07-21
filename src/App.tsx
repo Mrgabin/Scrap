@@ -30,6 +30,9 @@ import SearchView from "./components/SearchView";
 import SettingsView from "./components/SettingsView";
 import PlaylistView from "./components/PlaylistView";
 import ArtistView from "./components/ArtistView";
+import LibraryView from "./components/LibraryView";
+import MobileNav from "./components/MobileNav";
+import { useIsMobile } from "./lib/useIsMobile";
 import TasteSurveyModal from "./components/TasteSurveyModal";
 import SpotifyImportModal from "./components/SpotifyImportModal";
 import BlackHoleBackground from "./components/BlackHoleBackground";
@@ -2444,26 +2447,28 @@ export default function App() {
       })()}
       
       {/* Upper workspace layout container */}
-      <div className="flex flex-1 overflow-hidden p-2 gap-2 z-10 relative">
+      <div className="flex flex-1 overflow-hidden p-0 md:p-2 gap-2 z-10 relative">
         
-        {/* Sidebar Nav section */}
-        <Sidebar 
-          currentView={currentView}
-          setCurrentView={setCurrentView}
-          customPlaylists={customPlaylists}
-          likedTracks={likedTracks}
-          onCreatePlaylist={() => setIsModalOpen(true)}
-          onSelectPlaylist={handleSelectPlaylist}
-          onSelectLikedSongs={handleSelectLikedSongs}
-          user={user}
-          onLogout={handleLogout}
-          followedArtists={followedArtists}
-          onSelectArtist={handleSelectArtist}
-          artistAvatars={artistAvatars}
-        />
+        {/* Sidebar Nav section (Desktop only) */}
+        <div className="hidden md:flex shrink-0">
+          <Sidebar 
+            currentView={currentView}
+            setCurrentView={setCurrentView}
+            customPlaylists={customPlaylists}
+            likedTracks={likedTracks}
+            onCreatePlaylist={() => setIsModalOpen(true)}
+            onSelectPlaylist={handleSelectPlaylist}
+            onSelectLikedSongs={handleSelectLikedSongs}
+            user={user}
+            onLogout={handleLogout}
+            followedArtists={followedArtists}
+            onSelectArtist={handleSelectArtist}
+            artistAvatars={artistAvatars}
+          />
+        </div>
 
         {/* Main interactive window area */}
-        <main className="flex-1 bg-[#0a0a14]/40 backdrop-blur-md rounded-lg relative overflow-hidden flex flex-col border border-white/5 shadow-2xl">
+        <main className="flex-1 bg-[#0a0a14]/40 backdrop-blur-md rounded-none md:rounded-lg relative overflow-hidden flex flex-col border-0 md:border md:border-white/5 shadow-2xl w-full">
           
           {firestoreError && (
             <div className="bg-red-500/10 border-b border-red-500/30 text-red-400 px-4 py-2 text-xs flex justify-between items-center z-30">
@@ -2478,8 +2483,8 @@ export default function App() {
           )}
           
           {/* Main Top Header Controls */}
-          <header className="flex items-center justify-between p-4 sticky top-0 z-20 bg-[#0a0a14]/60 backdrop-blur-md border-b border-white/5 shrink-0 gap-4">
-            <div className="flex gap-2 shrink-0">
+          <header className="flex items-center justify-between p-2.5 sm:p-4 sticky top-0 z-20 bg-[#0a0a14]/80 backdrop-blur-md border-b border-white/5 shrink-0 gap-2 sm:gap-4">
+            <div className="flex items-center gap-2 shrink-0">
               <button 
                 onClick={() => setCurrentView("home")}
                 className="w-8 h-8 rounded-full bg-black/50 flex items-center justify-center text-[#b3b3b3] hover:text-white transition-colors"
@@ -2487,16 +2492,19 @@ export default function App() {
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
+              <span className="md:hidden font-black text-xs text-white tracking-tight flex items-center gap-1">
+                Scrap<span className="text-[#1DB954] text-[8px] font-mono font-bold px-1 rounded bg-white/10">APP</span>
+              </span>
             </div>
 
             {/* Middle Section: Home button + Pill Search bar */}
-            <div className="flex items-center gap-3 max-w-xl w-full justify-center">
+            <div className="flex items-center gap-2 max-w-xl w-full justify-center">
               <button 
                 onClick={() => {
                   setSearchQuery("");
                   setCurrentView("home");
                 }}
-                className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                className={`hidden sm:flex w-10 h-10 rounded-full items-center justify-center transition-all shrink-0 ${
                   currentView === "home" ? "bg-white text-black scale-105" : "bg-[#242424] text-[#b3b3b3] hover:text-white"
                 }`}
                 title="Accueil"
@@ -2506,7 +2514,7 @@ export default function App() {
 
               <div 
                 ref={searchContainerRef}
-                className="relative flex-1 max-w-md bg-[#242424] hover:bg-[#2e2e2e] focus-within:bg-[#242424] focus-within:ring-1 focus-within:ring-white/30 rounded-full flex items-center px-4 py-2 gap-2 transition-all shadow-md pr-20"
+                className="relative flex-1 max-w-md bg-[#242424] hover:bg-[#2e2e2e] focus-within:bg-[#242424] focus-within:ring-1 focus-within:ring-white/30 rounded-full flex items-center px-3 py-1.5 sm:px-4 sm:py-2 gap-2 transition-all shadow-md pr-12 sm:pr-20"
               >
                 <Search className="w-5 h-5 text-neutral-400 shrink-0" />
                 <input
@@ -2739,6 +2747,21 @@ export default function App() {
               />
             )}
 
+            {currentView === "library" && (
+              <LibraryView 
+                customPlaylists={customPlaylists}
+                likedTracks={likedTracks}
+                onCreatePlaylist={() => setIsModalOpen(true)}
+                onSelectPlaylist={handleSelectPlaylist}
+                onSelectLikedSongs={handleSelectLikedSongs}
+                user={user}
+                followedArtists={followedArtists}
+                onSelectArtist={handleSelectArtist}
+                artistAvatars={artistAvatars}
+                onOpenAuth={() => setShowAuthModal(true)}
+              />
+            )}
+
             {currentView === "settings" && (
               <SettingsView 
                 user={user}
@@ -2863,6 +2886,13 @@ export default function App() {
         isLikedSongsContext={currentView === "liked-songs" || activePlaybackContext === "liked"}
         isRecommendation={currentTrack?.isRecommendation || false}
         onDislikeRecommendation={handleDislikeRecommendation}
+      />
+
+      {/* Mobile Bottom Navigation Bar (< md) */}
+      <MobileNav 
+        currentView={currentView}
+        setCurrentView={setCurrentView}
+        hasCurrentTrack={!!currentTrack}
       />
 
       {/* Create Custom Playlist Interactive Overlay Modal */}

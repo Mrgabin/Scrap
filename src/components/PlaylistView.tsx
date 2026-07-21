@@ -178,7 +178,7 @@ export default function PlaylistView({
   };
 
   return (
-    <div className="h-full overflow-y-auto text-white select-none pb-24" id="playlist_detailed_view">
+    <div className="h-full overflow-y-auto text-white select-none pb-36 md:pb-28" id="playlist_detailed_view">
       
       {/* 1. Playlist Header */}
       <div 

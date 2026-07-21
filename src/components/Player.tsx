@@ -7,10 +7,11 @@ import {
   Volume2, 
   VolumeX, 
   Heart, 
-  Maximize2,
   Shuffle,
   Sparkles,
-  Ban
+  Ban,
+  ChevronDown,
+  Maximize2
 } from "lucide-react";
 import { Track } from "../types";
 
@@ -60,6 +61,7 @@ export default function Player({
   onDislikeRecommendation
 }: PlayerProps) {
   const [prevVolume, setPrevVolume] = useState(volume);
+  const [isMobileExpanded, setIsMobileExpanded] = useState(false);
 
   const formatTime = (timeInSeconds: number) => {
     if (isNaN(timeInSeconds)) return "0:00";
@@ -86,189 +88,404 @@ export default function Player({
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <footer className="h-[95px] bg-black/45 backdrop-blur-md border-t border-white/5 flex items-center justify-between px-4 z-40 select-none text-white shrink-0" id="media_player_footer">
-      
-      {/* 1. Track Metadata Section */}
-      <div className="flex items-center w-[30%] min-w-[180px] gap-4">
-        {currentTrack ? (
-          <>
-            <div className="w-14 h-14 bg-[#282828] rounded overflow-hidden shadow-lg shrink-0 border border-[#1f1f1f]">
-              <img referrerPolicy="no-referrer" src={currentTrack.thumbnail} alt={currentTrack.title} className="w-full h-full object-cover" />
+    <>
+      {/* 1. DESKTOP MEDIA PLAYER FOOTER (visible on screens md and larger) */}
+      <footer className="hidden md:flex h-[95px] bg-black/45 backdrop-blur-md border-t border-white/5 items-center justify-between px-4 z-40 select-none text-white shrink-0" id="media_player_footer">
+        
+        {/* Track Metadata Section */}
+        <div className="flex items-center w-[30%] min-w-[180px] gap-4">
+          {currentTrack ? (
+            <>
+              <div className="w-14 h-14 bg-[#282828] rounded overflow-hidden shadow-lg shrink-0 border border-[#1f1f1f]">
+                <img referrerPolicy="no-referrer" src={currentTrack.thumbnail} alt={currentTrack.title} className="w-full h-full object-cover" />
+              </div>
+              <div className="overflow-hidden">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-semibold text-white truncate max-w-[130px] hover:underline cursor-pointer">
+                    {currentTrack.title}
+                  </p>
+                  {isRecommendation && (
+                    <span className="bg-[#1DB954]/10 text-[#1DB954] border border-[#1DB954]/30 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider flex items-center gap-0.5 shrink-0 animate-pulse" title="Lecture Aléatoire Intelligente">
+                      <Sparkles className="w-2 h-2 fill-current" /> IA
+                    </span>
+                  )}
+                </div>
+                <p 
+                  onClick={() => onSelectArtist?.(currentTrack.artist)}
+                  className="text-xs text-[#b3b3b3] truncate max-w-[160px] hover:underline hover:text-white cursor-pointer"
+                >
+                  {currentTrack.artist}
+                </p>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button 
+                  id="player_like_btn"
+                  onClick={onLikeToggle}
+                  className={`hover:scale-105 active:scale-95 transition-all p-1 ml-2 focus:outline-none ${
+                    isLiked ? "text-[#1DB954]" : "text-[#b3b3b3] hover:text-white"
+                  }`}
+                  title={isLiked ? "Retirer des favoris" : "Ajouter aux favoris"}
+                >
+                  <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} />
+                </button>
+                {isRecommendation && onDislikeRecommendation && (
+                  <button 
+                    id="player_dislike_btn"
+                    onClick={onDislikeRecommendation}
+                    className="text-[#b3b3b3] hover:text-red-500 hover:scale-105 active:scale-95 transition-all p-1 focus:outline-none"
+                    title="Masquer cette suggestion"
+                  >
+                    <Ban className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center gap-3">
+              <div className="w-14 h-14 bg-[#121212] rounded flex items-center justify-center border border-[#1f1f1f] text-[10px] text-[#404040]">
+                MUTE
+              </div>
+              <div>
+                <p className="text-sm text-[#535353] font-medium">Aucun titre sélectionné</p>
+                <p className="text-xs text-[#535353]">Choisissez un morceau</p>
+              </div>
             </div>
-            <div className="overflow-hidden">
-              <div className="flex items-center gap-1.5">
-                <p className="text-sm font-semibold text-white truncate max-w-[130px] hover:underline cursor-pointer">
+          )}
+        </div>
+
+        {/* Playback Control Center */}
+        <div className="flex-1 flex flex-col items-center gap-2 max-w-[600px]">
+          <div className="flex items-center gap-5">
+            <button 
+              id="player_shuffle_btn"
+              onClick={onShuffleToggle}
+              disabled={!currentTrack}
+              className={`relative p-2 rounded-full focus:outline-none transition-all duration-200 disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center ${
+                shuffleMode === 1 || shuffleMode === 2 
+                  ? "text-[#1DB954] hover:text-[#1ed760] scale-105" 
+                  : "text-[#b3b3b3] hover:text-white"
+              }`}
+              title={shuffleMode === 0 ? "Activer l'aléatoire" : shuffleMode === 1 ? "Smart Shuffle" : "Désactiver"}
+            >
+              <div className="relative">
+                <Shuffle className="w-5 h-5" />
+                {shuffleMode === 2 && (
+                  <Sparkles className="w-2.5 h-2.5 text-[#1DB954] absolute -top-1.5 -left-1.5 fill-current animate-pulse" />
+                )}
+              </div>
+              {(shuffleMode === 1 || shuffleMode === 2) && (
+                <span className="absolute bottom-[-1px] w-1.5 h-1.5 bg-[#1DB954] rounded-full shadow-[0_0_4px_#1DB954]" />
+              )}
+            </button>
+
+            <button 
+              onClick={onPrevTrack}
+              disabled={!currentTrack}
+              className="text-[#b3b3b3] hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-colors"
+            >
+              <SkipBack className="w-5 h-5 fill-current" />
+            </button>
+
+            <button 
+              id="player_play_pause_btn"
+              onClick={onPlayPauseToggle}
+              disabled={!currentTrack}
+              className="w-9 h-9 bg-white text-black rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all disabled:opacity-40 disabled:pointer-events-none shadow-md"
+            >
+              {isPlaying ? (
+                <Pause className="w-5 h-5 fill-current text-black" />
+              ) : (
+                <Play className="w-5 h-5 fill-current text-black translate-x-[1px]" />
+              )}
+            </button>
+
+            <button 
+              onClick={onNextTrack}
+              disabled={!currentTrack}
+              className="text-[#b3b3b3] hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-colors"
+            >
+              <SkipForward className="w-5 h-5 fill-current" />
+            </button>
+          </div>
+
+          {/* Timeline Slider */}
+          <div className="w-full flex items-center gap-3">
+            <span className="text-[11px] text-[#b3b3b3] min-w-[32px] text-right font-mono">
+              {formatTime(currentTime)}
+            </span>
+            
+            <div className="flex-1 relative group flex items-center">
+              <input
+                id="player_progress_slider"
+                type="range"
+                min={0}
+                max={duration || 100}
+                value={currentTime}
+                onChange={handleProgressChange}
+                disabled={!currentTrack}
+                className="w-full h-1 bg-[#4d4d4d] rounded-full appearance-none cursor-pointer outline-none focus:outline-none accent-[#1DB954] group-hover:bg-[#5a5a5a] relative z-10"
+                style={{
+                  background: `linear-gradient(to right, #1DB954 0%, #1DB954 ${progressPercent}%, #4d4d4d ${progressPercent}%, #4d4d4d 100%)`
+                }}
+              />
+            </div>
+
+            <span className="text-[11px] text-[#b3b3b3] min-w-[32px] font-mono">
+              {formatTime(duration)}
+            </span>
+          </div>
+        </div>
+
+        {/* Sound / Volume & Options */}
+        <div className="w-[30%] min-w-[180px] flex items-center justify-end gap-3.5 text-[#b3b3b3]">
+          <button 
+            onClick={handleVolumeToggle}
+            className="hover:text-white transition-colors"
+          >
+            {volume === 0 ? (
+              <VolumeX className="w-5 h-5 text-red-500" />
+            ) : (
+              <Volume2 className="w-5 h-5" />
+            )}
+          </button>
+
+          <div className="w-24 relative flex items-center group">
+            <input
+              id="player_volume_slider"
+              type="range"
+              min={0}
+              max={100}
+              value={volume}
+              onChange={(e) => setVolume(parseInt(e.target.value))}
+              className="w-full h-1 bg-[#4d4d4d] rounded-full appearance-none cursor-pointer outline-none focus:outline-none accent-[#1DB954] relative z-10"
+              style={{
+                background: `linear-gradient(to right, #1DB954 0%, #1DB954 ${volume}%, #4d4d4d ${volume}%, #4d4d4d 100%)`
+              }}
+            />
+          </div>
+        </div>
+      </footer>
+
+      {/* 2. MOBILE FLOATING MINI-PLAYER BAR (visible on screens < md) */}
+      {currentTrack && (
+        <div 
+          className="fixed bottom-[58px] left-2 right-2 z-40 md:hidden bg-[#161622]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.8)] overflow-hidden select-none active:scale-[0.99] transition-transform"
+          id="mobile_mini_player"
+        >
+          {/* Top Thin Progress Bar */}
+          <div className="w-full h-[2px] bg-white/10 relative">
+            <div 
+              className="h-full bg-[#1DB954] transition-all duration-300"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+
+          <div 
+            className="p-2.5 flex items-center justify-between gap-3 cursor-pointer"
+            onClick={() => setIsMobileExpanded(true)}
+          >
+            {/* Thumbnail + Title */}
+            <div className="flex items-center gap-3 overflow-hidden flex-1">
+              <div className="w-11 h-11 rounded-xl bg-neutral-800 overflow-hidden shrink-0 border border-white/10 shadow-md relative">
+                <img
+                  referrerPolicy="no-referrer"
+                  src={currentTrack.thumbnail}
+                  alt={currentTrack.title}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="overflow-hidden flex-1">
+                <p className="text-xs font-bold text-white truncate">
                   {currentTrack.title}
                 </p>
+                <p className="text-[11px] text-neutral-400 truncate mt-0.5">
+                  {currentTrack.artist}
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+              <button
+                onClick={onLikeToggle}
+                className={`p-1.5 focus:outline-none transition-colors ${
+                  isLiked ? "text-[#1DB954]" : "text-neutral-400"
+                }`}
+              >
+                <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} />
+              </button>
+
+              <button
+                onClick={onPlayPauseToggle}
+                className="w-9 h-9 rounded-full bg-white text-black flex items-center justify-center font-bold shadow-md active:scale-95 transition-transform"
+              >
+                {isPlaying ? (
+                  <Pause className="w-4 h-4 fill-current text-black" />
+                ) : (
+                  <Play className="w-4 h-4 fill-current text-black translate-x-[0.5px]" />
+                )}
+              </button>
+
+              <button
+                onClick={onNextTrack}
+                className="p-1.5 text-neutral-300 hover:text-white transition-colors"
+              >
+                <SkipForward className="w-5 h-5 fill-current" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. MOBILE FULL-SCREEN PLAYER MODAL OVERLAY */}
+      {currentTrack && isMobileExpanded && (
+        <div 
+          className="fixed inset-0 z-50 bg-gradient-to-b from-[#18182c] via-[#0d0d16] to-[#08080f] flex flex-col p-6 text-white md:hidden animate-in slide-in-from-bottom duration-300 select-none overflow-y-auto"
+          id="mobile_fullscreen_player"
+        >
+          {/* Modal Header */}
+          <div className="flex items-center justify-between mb-6 shrink-0">
+            <button
+              onClick={() => setIsMobileExpanded(false)}
+              className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white active:scale-90 transition-transform"
+            >
+              <ChevronDown className="w-6 h-6" />
+            </button>
+            <div className="text-center">
+              <span className="text-[10px] uppercase font-bold tracking-widest text-neutral-400">
+                Lecteur Mobile
+              </span>
+              <p className="text-xs font-semibold text-neutral-200">
+                En cours de lecture
+              </p>
+            </div>
+            <div className="w-10" />
+          </div>
+
+          {/* Large High-Res Album Cover Art */}
+          <div className="my-auto py-4 flex flex-col items-center">
+            <div className="w-full max-w-[300px] aspect-square rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.8)] border border-white/10 relative group mb-6">
+              <img
+                referrerPolicy="no-referrer"
+                src={currentTrack.thumbnail}
+                alt={currentTrack.title}
+                className="w-full h-full object-cover"
+              />
+            </div>
+
+            {/* Track Info */}
+            <div className="w-full text-center px-2 mb-4">
+              <div className="flex items-center justify-center gap-2">
+                <h2 className="text-xl font-black text-white truncate max-w-[260px]">
+                  {currentTrack.title}
+                </h2>
                 {isRecommendation && (
-                  <span className="bg-[#1DB954]/10 text-[#1DB954] border border-[#1DB954]/30 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider flex items-center gap-0.5 shrink-0 animate-pulse" title="Lecture Aléatoire Intelligente">
-                    <Sparkles className="w-2 h-2 fill-current" /> IA
+                  <span className="bg-[#1DB954]/20 text-[#1DB954] border border-[#1DB954]/40 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 animate-pulse">
+                    <Sparkles className="w-2.5 h-2.5 fill-current" /> IA
                   </span>
                 )}
               </div>
               <p 
-                onClick={() => onSelectArtist?.(currentTrack.artist)}
-                className="text-xs text-[#b3b3b3] truncate max-w-[160px] hover:underline hover:text-white cursor-pointer"
+                onClick={() => {
+                  setIsMobileExpanded(false);
+                  onSelectArtist?.(currentTrack.artist);
+                }}
+                className="text-sm font-semibold text-[#1DB954] mt-1 cursor-pointer hover:underline"
               >
                 {currentTrack.artist}
               </p>
             </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <button 
-                id="player_like_btn"
-                onClick={onLikeToggle}
-                className={`hover:scale-105 active:scale-95 transition-all p-1 ml-2 focus:outline-none ${
-                  isLiked ? "text-[#1DB954]" : "text-[#b3b3b3] hover:text-white"
-                }`}
-                title={isLiked ? "Retirer des favoris" : "Ajouter aux favoris (Signal positif fort)"}
-              >
-                <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} />
-              </button>
-              {isRecommendation && onDislikeRecommendation && (
-                <button 
-                  id="player_dislike_btn"
-                  onClick={onDislikeRecommendation}
-                  className="text-[#b3b3b3] hover:text-red-500 hover:scale-105 active:scale-95 transition-all p-1 focus:outline-none"
-                  title="Masquer cette suggestion (Signal négatif fort)"
-                >
-                  <Ban className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          </>
-        ) : (
-          <div className="flex items-center gap-3">
-            <div className="w-14 h-14 bg-[#121212] rounded flex items-center justify-center border border-[#1f1f1f] text-[10px] text-[#404040]">
-              MUTE
-            </div>
-            <div>
-              <p className="text-sm text-[#535353] font-medium">Aucun titre sélectionné</p>
-              <p className="text-xs text-[#535353]">Choisissez un morceau</p>
-            </div>
           </div>
-        )}
-      </div>
 
-      {/* 2. Playback Control Center */}
-      <div className="flex-1 flex flex-col items-center gap-2 max-w-[600px]">
-        {/* Buttons */}
-        <div className="flex items-center gap-5">
-          {/* Shuffle Button with 3 states */}
-          <button 
-            id="player_shuffle_btn"
-            onClick={onShuffleToggle}
-            disabled={!currentTrack}
-            className={`relative p-2 rounded-full focus:outline-none transition-all duration-200 disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center ${
-              shuffleMode === 1 || shuffleMode === 2 
-                ? "text-[#1DB954] hover:text-[#1ed760] scale-105" 
-                : "text-[#b3b3b3] hover:text-white"
-            }`}
-            title={
-              shuffleMode === 0 
-                ? "Activer la lecture aléatoire" 
-                : shuffleMode === 1 
-                  ? "Activer l'Aléatoire Intelligent (Smart Shuffle)"
-                  : "Désactiver l'Aléatoire Intelligent (Smart Shuffle)"
-            }
-          >
-            <div className="relative">
-              <Shuffle className="w-5 h-5" />
-              {shuffleMode === 2 && (
-                <Sparkles className="w-2.5 h-2.5 text-[#1DB954] absolute -top-1.5 -left-1.5 fill-current animate-pulse" />
-              )}
-            </div>
-            {(shuffleMode === 1 || shuffleMode === 2) && (
-              <span className="absolute bottom-[-1px] w-1.5 h-1.5 bg-[#1DB954] rounded-full shadow-[0_0_4px_#1DB954]" />
-            )}
-          </button>
-
-          <button 
-            onClick={onPrevTrack}
-            disabled={!currentTrack}
-            className="text-[#b3b3b3] hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-colors"
-          >
-            <SkipBack className="w-5 h-5 fill-current" />
-          </button>
-
-          <button 
-            id="player_play_pause_btn"
-            onClick={onPlayPauseToggle}
-            disabled={!currentTrack}
-            className="w-9 h-9 bg-white text-black rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all disabled:opacity-40 disabled:pointer-events-none shadow-md"
-          >
-            {isPlaying ? (
-              <Pause className="w-5 h-5 fill-current text-black" />
-            ) : (
-              <Play className="w-5 h-5 fill-current text-black translate-x-[1px]" />
-            )}
-          </button>
-
-          <button 
-            onClick={onNextTrack}
-            disabled={!currentTrack}
-            className="text-[#b3b3b3] hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-colors"
-          >
-            <SkipForward className="w-5 h-5 fill-current" />
-          </button>
-        </div>
-
-        {/* Timeline Slider */}
-        <div className="w-full flex items-center gap-3">
-          <span className="text-[11px] text-[#b3b3b3] min-w-[32px] text-right font-mono">
-            {formatTime(currentTime)}
-          </span>
-          
-          <div className="flex-1 relative group flex items-center">
+          {/* Interactive Progress Slider */}
+          <div className="w-full mb-6 shrink-0 px-1">
             <input
-              id="player_progress_slider"
               type="range"
               min={0}
               max={duration || 100}
               value={currentTime}
               onChange={handleProgressChange}
-              disabled={!currentTrack}
-              className="w-full h-1 bg-[#4d4d4d] rounded-full appearance-none cursor-pointer outline-none focus:outline-none accent-[#1DB954] group-hover:bg-[#5a5a5a] relative z-10"
+              className="w-full h-2 bg-white/20 rounded-full appearance-none cursor-pointer outline-none accent-[#1DB954]"
               style={{
-                background: `linear-gradient(to right, #1DB954 0%, #1DB954 ${progressPercent}%, #4d4d4d ${progressPercent}%, #4d4d4d 100%)`
+                background: `linear-gradient(to right, #1DB954 0%, #1DB954 ${progressPercent}%, rgba(255,255,255,0.2) ${progressPercent}%, rgba(255,255,255,0.2) 100%)`
+              }}
+            />
+            <div className="flex justify-between text-xs font-mono text-neutral-400 mt-2">
+              <span>{formatTime(currentTime)}</span>
+              <span>{formatTime(duration)}</span>
+            </div>
+          </div>
+
+          {/* Main Controls Row */}
+          <div className="flex items-center justify-around mb-8 shrink-0">
+            {/* Shuffle */}
+            <button
+              onClick={onShuffleToggle}
+              className={`p-3 rounded-full transition-all active:scale-90 ${
+                shuffleMode > 0 ? "text-[#1DB954] bg-[#1DB954]/10" : "text-neutral-400"
+              }`}
+            >
+              <Shuffle className="w-6 h-6" />
+            </button>
+
+            {/* Prev */}
+            <button
+              onClick={onPrevTrack}
+              className="p-3 text-white active:scale-90 transition-transform"
+            >
+              <SkipBack className="w-7 h-7 fill-current" />
+            </button>
+
+            {/* Main Play/Pause Button */}
+            <button
+              onClick={onPlayPauseToggle}
+              className="w-16 h-16 rounded-full bg-[#1DB954] text-black flex items-center justify-center font-bold shadow-xl shadow-[#1db954]/30 active:scale-90 transition-transform"
+            >
+              {isPlaying ? (
+                <Pause className="w-7 h-7 fill-current text-black" />
+              ) : (
+                <Play className="w-7 h-7 fill-current text-black translate-x-[1px]" />
+              )}
+            </button>
+
+            {/* Next */}
+            <button
+              onClick={onNextTrack}
+              className="p-3 text-white active:scale-90 transition-transform"
+            >
+              <SkipForward className="w-7 h-7 fill-current" />
+            </button>
+
+            {/* Heart */}
+            <button
+              onClick={onLikeToggle}
+              className={`p-3 rounded-full transition-all active:scale-90 ${
+                isLiked ? "text-[#1DB954]" : "text-neutral-400"
+              }`}
+            >
+              <Heart className={`w-6 h-6 ${isLiked ? "fill-current" : ""}`} />
+            </button>
+          </div>
+
+          {/* Volume Row */}
+          <div className="flex items-center gap-3 px-4 py-3 bg-white/5 rounded-2xl shrink-0">
+            <button onClick={handleVolumeToggle} className="text-neutral-400">
+              {volume === 0 ? <VolumeX className="w-5 h-5 text-red-400" /> : <Volume2 className="w-5 h-5" />}
+            </button>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={volume}
+              onChange={(e) => setVolume(parseInt(e.target.value))}
+              className="w-full h-1.5 bg-white/20 rounded-full appearance-none outline-none accent-[#1DB954]"
+              style={{
+                background: `linear-gradient(to right, #1DB954 0%, #1DB954 ${volume}%, rgba(255,255,255,0.2) ${volume}%, rgba(255,255,255,0.2) 100%)`
               }}
             />
           </div>
-
-          <span className="text-[11px] text-[#b3b3b3] min-w-[32px] font-mono">
-            {formatTime(duration)}
-          </span>
         </div>
-      </div>
-
-      {/* 3. Sound / Volume & Options Section */}
-      <div className="w-[30%] min-w-[180px] flex items-center justify-end gap-3.5 text-[#b3b3b3]">
-        <button 
-          onClick={handleVolumeToggle}
-          className="hover:text-white transition-colors"
-        >
-          {volume === 0 ? (
-            <VolumeX className="w-5 h-5 text-red-500" />
-          ) : (
-            <Volume2 className="w-5 h-5" />
-          )}
-        </button>
-
-        <div className="w-24 relative flex items-center group">
-          <input
-            id="player_volume_slider"
-            type="range"
-            min={0}
-            max={100}
-            value={volume}
-            onChange={(e) => setVolume(parseInt(e.target.value))}
-            className="w-full h-1 bg-[#4d4d4d] rounded-full appearance-none cursor-pointer outline-none focus:outline-none accent-[#1DB954] relative z-10"
-            style={{
-              background: `linear-gradient(to right, #1DB954 0%, #1DB954 ${volume}%, #4d4d4d ${volume}%, #4d4d4d 100%)`
-            }}
-          />
-        </div>
-      </div>
-
-    </footer>
+      )}
+    </>
   );
 }

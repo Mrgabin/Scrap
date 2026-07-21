@@ -83,7 +83,7 @@ export default function HomeView({
   };
 
   return (
-    <div className="p-6 overflow-y-auto h-full text-white" id="home_view">
+    <div className="p-3 sm:p-6 pb-36 md:pb-28 overflow-y-auto h-full text-white" id="home_view">
       
       {/* 1. Header Greeting & Quick Grid */}
       <div className="mb-8">

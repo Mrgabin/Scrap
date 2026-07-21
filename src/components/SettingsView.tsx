@@ -273,7 +273,7 @@ export default function SettingsView({
   };
 
   return (
-    <div className="p-6 md:p-8 max-w-4xl mx-auto text-white overflow-y-auto h-full" id="settings_view">
+    <div className="p-4 md:p-8 pb-36 md:pb-28 max-w-4xl mx-auto text-white overflow-y-auto h-full" id="settings_view">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 pb-4 border-b border-[#282828]" id="settings_header_section">
         <div>
           <h2 className="text-3xl font-bold mb-1">Paramètres du Compte</h2>

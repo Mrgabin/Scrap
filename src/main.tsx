@@ -18,7 +18,8 @@ try {
           try {
             const currentHost = window.location.hostname;
             const apiHost = new URL(apiBase).hostname;
-            if (currentHost !== apiHost && currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
+            const isVercel = currentHost.endsWith('.vercel.app') || window.location.href.includes('vercel');
+            if (currentHost !== apiHost && currentHost !== 'localhost' && currentHost !== '127.0.0.1' && !isVercel) {
               input = `${apiBase}${input}`;
             }
           } catch (e) {
@@ -39,7 +40,8 @@ try {
           try {
             const currentHost = window.location.hostname;
             const apiHost = new URL(apiBase).hostname;
-            if (currentHost !== apiHost && currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
+            const isVercel = currentHost.endsWith('.vercel.app') || window.location.href.includes('vercel');
+            if (currentHost !== apiHost && currentHost !== 'localhost' && currentHost !== '127.0.0.1' && !isVercel) {
               input = `${apiBase}${input}`;
             }
           } catch (e) {

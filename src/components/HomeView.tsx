@@ -251,6 +251,11 @@ export default function HomeView({
                         src={artistAvatars[artist]} 
                         alt={artist} 
                         className="w-full h-full object-cover animate-fade-in" 
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          target.onerror = null;
+                          target.src = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80";
+                        }}
                       />
                       <div className="absolute inset-0 bg-black/15 group-hover:bg-black/0 transition-colors" />
                     </>

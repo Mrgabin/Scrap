@@ -370,6 +370,11 @@ export default function ArtistView({
                 src={profileData.avatarUrl} 
                 alt={artistName} 
                 className="w-full h-full object-cover animate-fade-in" 
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  target.onerror = null;
+                  target.src = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80";
+                }}
               />
             ) : (
               <span className="text-2xl md:text-5xl font-extrabold uppercase">{artistName.charAt(0)}</span>

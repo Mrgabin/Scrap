@@ -6,6 +6,9 @@ import {defineConfig} from 'vite';
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
+    define: {
+      'import.meta.env.VITE_API_URL': JSON.stringify(process.env.APP_URL || ''),
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

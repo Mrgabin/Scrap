@@ -161,50 +161,6 @@ export default function App() {
   const [searchResults, setSearchResults] = useState<Track[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
 
-  const executeSearch = async (queryVal: string) => {
-    if (!queryVal.trim()) {
-      setSearchResults([]);
-      return;
-    }
-    setSearchLoading(true);
-    try {
-      const response = await fetch(`/api/search?q=${encodeURIComponent(queryVal)}&country=${encodeURIComponent(country)}`);
-      const data = await response.json();
-      if (data.results) {
-        setSearchResults(data.results);
-        
-        // Find the primary artist of this search and pre-fetch/cache their official avatar image
-        if (data.results.length > 0) {
-          const queryLower = queryVal.toLowerCase().trim();
-          const matchedTrack = data.results.find((t: any) => t.artist.toLowerCase().includes(queryLower));
-          const artistName = matchedTrack ? matchedTrack.artist : data.results[0].artist;
-          
-          if (artistName && !artistAvatars[artistName]) {
-            fetch(`/api/artist-profile?name=${encodeURIComponent(artistName)}`)
-              .then(res => {
-                if (res.ok) return res.json();
-                throw new Error("Failed to load profile");
-              })
-              .then(profile => {
-                if (profile && profile.avatarUrl) {
-                  setArtistAvatars(prev => {
-                    const next = { ...prev, [artistName]: profile.avatarUrl };
-                    localStorage.setItem("spotify_artist_avatars", JSON.stringify(next));
-                    return next;
-                  });
-                }
-              })
-              .catch(err => console.warn(`Could not background fetch artist profile for ${artistName}:`, err));
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Search failed:", err);
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-
   // View state
   const [currentView, setCurrentView] = useState("home"); // home, search, settings, library, liked-songs, playlist-{id}, artist-{name}
   const [selectedArtistName, setSelectedArtistName] = useState("");
@@ -699,6 +655,59 @@ export default function App() {
 
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
+
+  const executeSearch = async (queryVal: string) => {
+    if (!queryVal.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    setSearchLoading(true);
+    try {
+      const response = await fetch(`/api/search`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          q: queryVal,
+          country: country,
+          tasteScores: tasteScores,
+          recentArtists: recentTracks ? recentTracks.map((tr: Track) => tr.artist) : []
+        })
+      });
+      const data = await response.json();
+      if (data.results) {
+        setSearchResults(data.results);
+        
+        // Find the primary artist of this search and pre-fetch/cache their official avatar image
+        if (data.results.length > 0) {
+          const queryLower = queryVal.toLowerCase().trim();
+          const matchedTrack = data.results.find((t: any) => t.artist.toLowerCase().includes(queryLower));
+          const artistName = matchedTrack ? matchedTrack.artist : data.results[0].artist;
+          
+          if (artistName && !artistAvatars[artistName]) {
+            fetch(`/api/artist-profile?name=${encodeURIComponent(artistName)}`)
+              .then(res => {
+                if (res.ok) return res.json();
+                throw new Error("Failed to load profile");
+              })
+              .then(profile => {
+                if (profile && profile.avatarUrl) {
+                  setArtistAvatars(prev => {
+                    const next = { ...prev, [artistName]: profile.avatarUrl };
+                    localStorage.setItem("spotify_artist_avatars", JSON.stringify(next));
+                    return next;
+                  });
+                }
+              })
+              .catch(err => console.warn(`Could not background fetch artist profile for ${artistName}:`, err));
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Search failed:", err);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
 
   // 1. Firebase Auth State Monitor / Guest Mode check
   useEffect(() => {
@@ -1754,7 +1763,10 @@ export default function App() {
       if (isAlreadyLiked) {
         await deleteDoc(docRef);
       } else {
-        await setDoc(docRef, currentTrack);
+        await setDoc(docRef, {
+          ...currentTrack,
+          addedAt: new Date().toISOString()
+        });
       }
     } catch (err: any) {
       console.error("Failed to toggle like:", err);
@@ -1776,7 +1788,10 @@ export default function App() {
       if (isAlreadyLiked) {
         await deleteDoc(docRef);
       } else {
-        await setDoc(docRef, track);
+        await setDoc(docRef, {
+          ...track,
+          addedAt: new Date().toISOString()
+        });
       }
     } catch (err: any) {
       console.error("Failed to toggle track like:", err);
@@ -1826,7 +1841,10 @@ export default function App() {
       const updatedTracks = [...(targetPl.tracks || [])];
       // Avoid duplicates
       if (!updatedTracks.some(t => t.id === track.id)) {
-        updatedTracks.push(track);
+        updatedTracks.push({
+          ...track,
+          addedAt: new Date().toISOString()
+        });
         await updateDoc(plRef, { tracks: updatedTracks });
       }
     } catch (err: any) {
@@ -2586,6 +2604,13 @@ export default function App() {
                                     item.type === "Artiste" ? "rounded-full" : "rounded"
                                   }`}
                                   referrerPolicy="no-referrer"
+                                  onError={(e) => {
+                                    const target = e.currentTarget;
+                                    target.onerror = null;
+                                    target.src = item.type === "Artiste"
+                                      ? "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80"
+                                      : "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=100&auto=format&fit=crop&q=60";
+                                  }}
                                 />
                               )}
                               <div className="overflow-hidden min-w-0">
@@ -2633,7 +2658,17 @@ export default function App() {
               >
                 <div className="w-7 h-7 rounded-full overflow-hidden shrink-0 bg-neutral-800">
                   {user.photoURL ? (
-                    <img referrerPolicy="no-referrer" src={user.photoURL} alt="Avatar" className="w-full h-full object-cover" />
+                    <img 
+                      referrerPolicy="no-referrer" 
+                      src={user.photoURL} 
+                      alt="Avatar" 
+                      className="w-full h-full object-cover" 
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        target.onerror = null;
+                        target.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80";
+                      }}
+                    />
                   ) : (
                     <div className="w-full h-full bg-[#1DB954] text-black flex items-center justify-center text-xs font-bold">
                       {user.displayName?.substring(0, 1).toUpperCase() || "S"}

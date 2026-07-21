@@ -11,6 +11,17 @@ const PORT = 3000;
 
 app.use(express.json());
 
+// Enable CORS support for external static hosting clients (Vercel, Firebase Hosting, etc.)
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 // In-memory cache for home feeds to keep loading near-instantaneous
 const homeFeedCache: { [key: string]: { data: any; timestamp: number } } = {};
 const CACHE_DURATION = 15 * 60 * 1000; // 15 minutes
@@ -162,7 +173,7 @@ async function searchYouTube(query: string, limit = 15): Promise<any[]> {
         const data = extractYtInitialData(html);
         
         if (!data) {
-          console.warn(`Could not extract ytInitialData for "${query}" (attempt ${attempt}), using empty fallback.`);
+          console.log(`[YT extraction] retry for "${query}"`);
           continue;
         }
 
@@ -233,7 +244,7 @@ async function searchYouTube(query: string, limit = 15): Promise<any[]> {
     }
 
     // If we reach here, search failed or yielded nothing.
-    console.warn(`Warning: YouTube search for "${query}" failed/timed out after 2 attempts. Error:`, lastError?.message || lastError);
+    console.log(`[YT search status] info query="${query}"`);
 
     // If we have an expired cache, return it rather than an empty list
     if (cached) {
@@ -254,11 +265,10 @@ async function searchYouTube(query: string, limit = 15): Promise<any[]> {
   }
 }
 
-// 1. Search API endpoint
-app.get("/api/search", async (req, res) => {
-  const query = req.query.q as string;
-  const country = (req.query.country as string || "FR").toUpperCase();
+import { rankCandidates, logClick } from "./server/predictiveSearch";
 
+// 1. Search API endpoints (Supports multi-criteria contextual POST & legacy GET)
+async function handleSearchRequest(query: string, country: string, tasteScores: any, recentArtists: any, res: any) {
   if (!query) {
     return res.status(400).json({ error: "Missing query parameter 'q'" });
   }
@@ -292,55 +302,45 @@ app.get("/api/search", async (req, res) => {
       results = matched;
     }
 
-    // PRIORITIZATION: Prioritize artists based on user's country (e.g., French artists for FR)
-    if (country === "FR") {
-      const frenchKeywords = [
-        "jul", "ninho", "gims", "nekfeu", "stromae", "angèle", "clara luciani", "daft punk", "femtogo", 
-        "booba", "sch", "plk", "gazo", "tiakola", "pnl", "orelsan", "lomepal", "soprano", "aya nakamura",
-        "indochine", "grand corps malade", "vianney", "slimane", "dadju", "tayc", "français", "french",
-        "variété", "rap fr", "pop fr"
-      ];
-      
-      results.sort((a, b) => {
-        const aLower = (a.artist + " " + a.title).toLowerCase();
-        const bLower = (b.artist + " " + b.title).toLowerCase();
-        
-        const aIsLocal = frenchKeywords.some(kw => aLower.includes(kw));
-        const bIsLocal = frenchKeywords.some(kw => bLower.includes(kw));
-        
-        if (aIsLocal && !bIsLocal) return -1;
-        if (!aIsLocal && bIsLocal) return 1;
-        return 0;
-      });
-    } else if (country && country !== "Other") {
-      // General prioritization for other countries if there are specific keywords
-      const countryKeywords: Record<string, string[]> = {
-        "BE": ["stromae", "angèle", "damso", "belge", "belgique"],
-        "CH": ["suisse", "swiss"],
-        "CA": ["the weeknd", "drake", "justin bieber", "celine dion", "shania twain", "canadien", "canada"],
-        "US": ["taylor swift", "eminem", "drake", "bruno mars", "billie eilish", "american", "us"],
-        "GB": ["queen", "ed sheeran", "adele", "coldplay", "dua lipa", "british", "uk"]
-      };
-      
-      const kws = countryKeywords[country];
-      if (kws) {
-        results.sort((a, b) => {
-          const aLower = (a.artist + " " + a.title).toLowerCase();
-          const bLower = (b.artist + " " + b.title).toLowerCase();
-          
-          const aIsLocal = kws.some(kw => aLower.includes(kw));
-          const bIsLocal = kws.some(kw => bLower.includes(kw));
-          
-          if (aIsLocal && !bIsLocal) return -1;
-          if (!aIsLocal && bIsLocal) return 1;
-          return 0;
-        });
-      }
-    }
+    // Phase 3: LTR Machine Learning Re-ranking
+    const rankedResults = rankCandidates(results, query, country, tasteScores, recentArtists);
     
-    res.json({ results });
+    res.json({ results: rankedResults });
   } catch (error) {
+    console.error("Predictive search failed:", error);
     res.status(500).json({ error: "Failed to perform search" });
+  }
+}
+
+app.post("/api/search", async (req, res) => {
+  const query = req.body.q || req.query.q as string;
+  const country = (req.body.country || req.query.country as string || "FR").toUpperCase();
+  const tasteScores = req.body.tasteScores;
+  const recentArtists = req.body.recentArtists;
+
+  await handleSearchRequest(query, country, tasteScores, recentArtists, res);
+});
+
+app.get("/api/search", async (req, res) => {
+  const query = req.query.q as string;
+  const country = (req.query.country as string || "FR").toUpperCase();
+  
+  await handleSearchRequest(query, country, undefined, undefined, res);
+});
+
+// Search Click Feedback Loop (Phase 4)
+app.post("/api/search/click", (req, res) => {
+  const { query, clickedId, type, title, artistName } = req.body;
+  if (!query || !clickedId) {
+    return res.status(400).json({ error: "Missing required parameters" });
+  }
+  
+  try {
+    logClick(query, clickedId, type, title, artistName);
+    res.json({ status: "ok", message: "Click recorded successfully" });
+  } catch (err) {
+    console.error("Error logging click:", err);
+    res.status(500).json({ error: "Failed to log click" });
   }
 });
 
@@ -509,7 +509,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
       }
     }
   } catch (deezerError) {
-    console.warn(`[Deezer API Error] Could not fetch artist profile for ${artistName}:`, deezerError?.message || deezerError);
+    console.log(`[Deezer API info] Could not fetch artist profile for ${artistName}:`, deezerError?.message || deezerError);
   }
 
   // Perform a YouTube channel search for the artist to scrape real avatar and channel details
@@ -519,7 +519,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
     try {
       const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(artistName)}&sp=EgIQAg%253D%253D`;
       const response = await fetch(searchUrl, {
-        signal: AbortSignal.timeout(1200),
+        signal: AbortSignal.timeout(3500),
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -531,7 +531,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
         searchHtml = await response.text();
       }
     } catch (e) {
-      console.warn(`Note: Filtered YouTube search timed out or failed for "${artistName}":`, e?.message || e);
+      console.log(`[YT profile status info] Filtered search for "${artistName}"`);
     }
 
     if (searchHtml) {
@@ -558,7 +558,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
           }
         }
       } catch (e) {
-        console.warn(`Error parsing filtered search for ${artistName}:`, e);
+        console.log(`[YT profile parser info] Filtered search for ${artistName}`);
       }
     }
 
@@ -568,7 +568,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
       try {
         const regularUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(artistName)}`;
         const regResponse = await fetch(regularUrl, {
-          signal: AbortSignal.timeout(1200),
+          signal: AbortSignal.timeout(3500),
           headers: {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7"
@@ -578,7 +578,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
           regHtml = await regResponse.text();
         }
       } catch (e) {
-        console.warn(`Note: Regular YouTube search timed out or failed for "${artistName}":`, e?.message || e);
+        console.log(`[YT profile status info] Regular search for "${artistName}"`);
       }
 
       if (regHtml) {
@@ -605,7 +605,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
             }
           }
         } catch (e) {
-          console.warn(`Error parsing regular search for ${artistName}:`, e);
+          console.log(`[YT profile parser info] Regular search for ${artistName}`);
         }
       }
     }
@@ -616,7 +616,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
       try {
         const channelPageUrl = `https://www.youtube.com/channel/${channelId}`;
         const chanResponse = await fetch(channelPageUrl, {
-          signal: AbortSignal.timeout(1200),
+          signal: AbortSignal.timeout(3500),
           headers: {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -627,7 +627,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
           chanHtml = await chanResponse.text();
         }
       } catch (e) {
-        console.warn(`Note: YouTube channel page fetch timed out or failed for "${artistName}":`, e?.message || e);
+        console.log(`[YT profile channel info] fetch for "${artistName}"`);
       }
 
       if (chanHtml) {
@@ -654,12 +654,12 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
             }
           }
         } catch (e) {
-          console.warn(`Error parsing channel page for ${artistName}:`, e);
+          console.log(`[YT profile parser info] Channel page for ${artistName}`);
         }
       }
     }
   } catch (error) {
-    console.warn(`Note: General error scraping channel for artist "${artistName}":`, error?.message || error);
+    console.log(`[YT profile scraper info] Scraping channel for artist "${artistName}"`);
   }
 
   // Ensure full protocol URL

@@ -124,6 +124,22 @@ export default function SearchView({
   const [activeFilter, setActiveFilter] = useState("Tout");
   const [openPlaylistDropdownId, setOpenPlaylistDropdownId] = useState<string | null>(null);
 
+  const logSearchClick = (item: any) => {
+    if (!query) return;
+    const cleanId = String(item.id || "").replace(/^(track-|custom-playlist-|artist-|curated-playlist-\d+-)/, "");
+    fetch("/api/search/click", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: query,
+        clickedId: cleanId,
+        type: item.type,
+        title: item.title,
+        artistName: item.artistName || item.title
+      })
+    }).catch(err => console.warn("Failed to log search click:", err));
+  };
+
   const handleCategoryClick = (catQuery: string, catName: string) => {
     setQuery(catName);
     executeSearch(catQuery);
@@ -160,7 +176,7 @@ export default function SearchView({
       list.push({
         id: `track-${track.id}`,
         title: track.title,
-        subtitle: `Titre • ${track.artist}` + (isFemtogoSearch && !track.artist.toLowerCase().includes("femtogo") ? "" : ", neophron"),
+        subtitle: `Titre • ${track.artist}`,
         type: "Titre",
         thumbnail: track.thumbnail,
         track: track,
@@ -198,19 +214,63 @@ export default function SearchView({
     if (results.length > 0) {
       const mainArt = primaryArtist ? primaryArtist.name : results[0].artist;
 
-      // Related Artist Item (like "Ptite Soeur")
-      const relatedArtistName = isFemtogoSearch ? "Ptite Soeur" : `${mainArt} Related`;
-      const artistAvatar = isFemtogoSearch 
-        ? "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150&auto=format&fit=crop&q=60" 
-        : getDeterministicArtistAvatar(relatedArtistName);
+      // Extract unique artists dynamically from results and known list
+      const uniqueArtistsInResults = new Set<string>();
       
-      list.splice(Math.min(7, list.length), 0, {
-        id: `artist-${relatedArtistName.toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
-        title: relatedArtistName,
-        subtitle: "Artiste",
-        type: "Artiste",
-        thumbnail: artistAvatar,
-        artistName: relatedArtistName
+      if (primaryArtist) {
+        uniqueArtistsInResults.add(primaryArtist.name);
+      } else if (mainArt) {
+        uniqueArtistsInResults.add(mainArt);
+      }
+
+      if (queryLower) {
+        const knownArtists = [
+          "The Weeknd", "Daft Punk", "Stromae", "FEMTOGO", "Clara Luciani", "Angèle", "Queen", "Nirvana", "AC/DC", 
+          "Ziak", "Lewild", "Pepyth", "Oliver Tree", "Ed Sheeran", "Harry Styles", "Dua Lipa", "Imagine Dragons", 
+          "Miley Cyrus", "Justin Bieber", "BTS", "Indila", "Coldplay", "Guns N' Roses", "Radiohead", "Oasis", 
+          "Red Hot Chili Peppers", "Linkin Park", "Kendrick Lamar", "Luther"
+        ];
+        knownArtists.forEach(ka => {
+          if (ka.toLowerCase().includes(queryLower)) {
+            uniqueArtistsInResults.add(ka);
+          }
+        });
+      }
+
+      results.forEach((track) => {
+        if (track && track.artist && track.artist.toLowerCase() !== "unknown artist") {
+          const cleaned = track.artist.replace(/\b(ft\.?|feat\.?|featuring)\b/gi, "&");
+          const parts = cleaned.split(/[&,]/).map(p => p.trim()).filter(p => p.length > 1);
+          parts.forEach(p => {
+            uniqueArtistsInResults.add(p);
+          });
+        }
+      });
+
+      if (isFemtogoSearch) {
+        uniqueArtistsInResults.add("Ptite Soeur");
+      }
+
+      // Generate the array of artist items
+      const artistItems = Array.from(uniqueArtistsInResults).map((artName) => {
+        const avatar = artistAvatars[artName] || getDeterministicArtistAvatar(artName);
+        return {
+          id: `artist-${artName.toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
+          title: artName,
+          subtitle: "Artiste",
+          type: "Artiste",
+          thumbnail: avatar,
+          artistName: artName
+        };
+      });
+
+      // Distribute first 3 artist items inside the list, append the rest
+      artistItems.forEach((artistItem, index) => {
+        if (index < 3) {
+          list.splice(Math.min(4 + index * 2, list.length), 0, artistItem);
+        } else {
+          list.push(artistItem);
+        }
       });
 
       // 2. Add multiple highly functional curated playlists distributed with tracks
@@ -248,7 +308,7 @@ export default function SearchView({
     }
 
     return list;
-  }, [results, query, primaryArtist, customPlaylists]);
+  }, [results, query, primaryArtist, customPlaylists, artistAvatars]);
 
   // Filter the mixed lists based on active pill
   const filteredMixedResults = useMemo(() => {
@@ -309,7 +369,15 @@ export default function SearchView({
           {(activeFilter === "Tout" || activeFilter === "Artistes") && primaryArtist && (
             <div 
               id="best_match_artist_card"
-              onClick={() => onSelectArtist(primaryArtist.name)}
+              onClick={() => {
+                logSearchClick({
+                  id: `artist-${primaryArtist.name.toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
+                  type: "Artiste",
+                  title: primaryArtist.name,
+                  artistName: primaryArtist.name
+                });
+                onSelectArtist(primaryArtist.name);
+              }}
               className="w-full bg-[#181818]/60 hover:bg-[#202020]/80 border border-neutral-900/60 rounded-xl p-5 flex items-center justify-between gap-4 transition-all duration-300 shadow-md group cursor-pointer"
             >
               <div className="flex items-center gap-5 min-w-0">
@@ -320,6 +388,11 @@ export default function SearchView({
                     src={primaryArtist.avatar} 
                     alt={primaryArtist.name} 
                     className="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded-full shadow-lg border border-neutral-800 shrink-0"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      target.onerror = null;
+                      target.src = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80";
+                    }}
                   />
                 ) : (
                   <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-neutral-800 border border-neutral-700/60 shrink-0 flex items-center justify-center text-3xl font-extrabold text-neutral-400 uppercase select-none">
@@ -387,6 +460,7 @@ export default function SearchView({
                   key={item.id}
                   className="flex items-center justify-between px-4 py-2.5 rounded-lg hover:bg-white/5 transition-all group cursor-pointer"
                   onClick={() => {
+                    logSearchClick(item);
                     if (item.type === "Titre" && item.track) {
                       onPlayTrack(item.track, results);
                     } else if (item.type === "Artiste") {
@@ -410,6 +484,13 @@ export default function SearchView({
                         className={`w-10 h-10 object-cover shrink-0 shadow-md ${
                           item.type === "Artiste" ? "rounded-full" : "rounded"
                         }`}
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          target.onerror = null;
+                          target.src = item.type === "Artiste" 
+                            ? "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80" 
+                            : "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=100&auto=format&fit=crop&q=60";
+                        }}
                       />
                     )}
                     <div className="overflow-hidden min-w-0">

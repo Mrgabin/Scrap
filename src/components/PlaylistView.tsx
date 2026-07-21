@@ -23,6 +23,40 @@ interface PlaylistViewProps {
   onSharePlaylist?: (playlist: Playlist) => Promise<string>;
 }
 
+function formatRelativeTime(addedAt?: string): string {
+  if (!addedAt) return "-";
+  try {
+    const date = new Date(addedAt);
+    if (isNaN(date.getTime())) return "-";
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    if (diffMs < 0) return "À l'instant";
+    
+    const diffSecs = Math.floor(diffMs / 1000);
+    const diffMins = Math.floor(diffSecs / 60);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    const diffMonths = Math.floor(diffDays / 30);
+    const diffYears = Math.floor(diffDays / 365);
+
+    if (diffSecs < 60) {
+      return "Il y a quelques secondes";
+    } else if (diffMins < 60) {
+      return `Il y a ${diffMins} minute${diffMins > 1 ? "s" : ""}`;
+    } else if (diffHours < 24) {
+      return `Il y a ${diffHours} heure${diffHours > 1 ? "s" : ""}`;
+    } else if (diffDays < 30) {
+      return `Il y a ${diffDays} jour${diffDays > 1 ? "s" : ""}`;
+    } else if (diffMonths < 12) {
+      return `Il y a ${diffMonths} mois`;
+    } else {
+      return `Il y a ${diffYears} an${diffYears > 1 ? "s" : ""}`;
+    }
+  } catch (e) {
+    return "-";
+  }
+}
+
 export default function PlaylistView({
   playlist,
   likedTracks,
@@ -108,7 +142,21 @@ export default function PlaylistView({
 
   // 2. Sort tracks based on active sort options
   const sortedTracks = React.useMemo(() => {
-    if (sortBy === "recent") return filteredTracks;
+    if (sortBy === "recent") {
+      return [...filteredTracks].sort((a, b) => {
+        const timeA = a.addedAt ? new Date(a.addedAt).getTime() : 0;
+        const timeB = b.addedAt ? new Date(b.addedAt).getTime() : 0;
+        
+        if (timeA !== timeB) {
+          return timeB - timeA; // Descending order (newest first)
+        }
+        
+        // If timestamps are identical or missing, use original array index in reverse
+        const idxA = filteredTracks.indexOf(a);
+        const idxB = filteredTracks.indexOf(b);
+        return idxB - idxA;
+      });
+    }
     
     return [...filteredTracks].sort((a, b) => {
       let comparison = 0;
@@ -422,12 +470,13 @@ export default function PlaylistView({
           sortedTracks.length > 0 ? (
             <div className="flex flex-col gap-1">
               {/* Table headers */}
-              <div className={`grid grid-cols-[auto_1fr_1fr_auto] gap-4 px-4 py-2 text-xs font-bold text-[#b3b3b3] uppercase tracking-wider border-b border-neutral-800 ${
+              <div className={`grid grid-cols-[auto_2fr_1.2fr_auto] md:grid-cols-[auto_2.5fr_2fr_1.5fr_auto] gap-4 px-4 py-2 text-xs font-bold text-[#b3b3b3] uppercase tracking-wider border-b border-neutral-800 ${
                 viewMode === "compact" ? "mb-1.5" : "mb-3"
               }`}>
                 <span className="w-6 text-center">#</span>
                 <span>Titre</span>
                 <span>Artiste</span>
+                <span className="hidden md:inline">Date d'ajout</span>
                 <span className="flex justify-end pr-2"><Clock className="w-4 h-4" /></span>
               </div>
 
@@ -435,7 +484,7 @@ export default function PlaylistView({
               {sortedTracks.map((track, idx) => (
                 <div 
                   key={`${track.id}-${idx}`}
-                  className={`grid grid-cols-[auto_1fr_1fr_auto] gap-4 items-center px-4 rounded-md hover:bg-white/5 transition-colors group relative cursor-pointer ${
+                  className={`grid grid-cols-[auto_2fr_1.2fr_auto] md:grid-cols-[auto_2.5fr_2fr_1.5fr_auto] gap-4 items-center px-4 rounded-md hover:bg-white/5 transition-colors group relative cursor-pointer ${
                     viewMode === "compact" ? "py-1.5" : "py-2.5"
                   }`}
                   onClick={() => onPlayTrack(track, sortedTracks)}
@@ -473,6 +522,11 @@ export default function PlaylistView({
                   >
                     {track.artist}
                   </p>
+
+                  {/* Date d'ajout */}
+                  <span className="hidden md:inline text-xs text-[#b3b3b3] truncate">
+                    {formatRelativeTime(track.addedAt)}
+                  </span>
 
                   {/* Duration & Remove button */}
                   <div className="flex items-center gap-4 justify-end relative">

@@ -8,6 +8,7 @@ export interface Track {
   thumbnail: string;
   views?: string;
   isRecommendation?: boolean;
+  addedAt?: string;
 }
 
 export interface Playlist {

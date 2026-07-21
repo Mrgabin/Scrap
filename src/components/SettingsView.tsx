@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { updateEmail, updatePassword, updateProfile, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 import { doc, getDoc, updateDoc, setDoc, collection, getDocs, deleteDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
-import { User, Shield, Image as ImageIcon, Save, CheckCircle, AlertTriangle, Heart, UserMinus, Music, ExternalLink, LogOut, Trash2, Loader2, Key, Sparkles } from "lucide-react";
+import { User, Shield, Image as ImageIcon, Save, CheckCircle, AlertTriangle, Heart, UserMinus, Music, ExternalLink, LogOut, Trash2, Loader2, Key, Sparkles, Github, HelpCircle } from "lucide-react";
+import { getDeterministicArtistAvatar } from "../lib/avatarHelper";
 
 interface SettingsViewProps {
   user: any;
@@ -645,11 +646,22 @@ export default function SettingsView({
                     className="flex items-center gap-3.5 cursor-pointer flex-1 min-w-0"
                   >
                     <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 border border-neutral-800 bg-gradient-to-tr from-[#1DB954]/20 to-emerald-700 flex items-center justify-center font-bold text-lg text-white">
-                      {avatar ? (
-                        <img referrerPolicy="no-referrer" src={avatar} alt={artistName} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                      ) : (
-                        artistName.substring(0, 1).toUpperCase()
-                      )}
+                      {(() => {
+                        const avatarUrl = avatar || getDeterministicArtistAvatar(artistName);
+                        return (
+                          <img 
+                            referrerPolicy="no-referrer" 
+                            src={avatarUrl} 
+                            alt={artistName} 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                            onError={(e) => {
+                              const target = e.currentTarget;
+                              target.onerror = null;
+                              target.src = getDeterministicArtistAvatar(artistName);
+                            }}
+                          />
+                        );
+                      })()}
                     </div>
                     <div className="overflow-hidden">
                       <p className="font-bold text-sm text-white group-hover:text-[#1DB954] transition-colors truncate flex items-center gap-1.5">
@@ -773,6 +785,60 @@ export default function SettingsView({
             Aucun score d'affinité calculé pour l'instant. Commencez à écouter de la musique pour construire votre profil !
           </div>
         )}
+      </div>
+
+      {/* À propos & En savoir plus Section */}
+      <div className="bg-[#181818] rounded-xl p-6 border border-[#282828] mt-8 flex flex-col gap-6" id="settings_about_section">
+        <div className="flex items-center justify-between pb-4 border-b border-[#282828]">
+          <div className="flex items-center gap-3">
+            <HelpCircle className="w-5 h-5 text-[#1DB954]" />
+            <h3 className="font-bold text-lg">En savoir plus • About Scrap</h3>
+          </div>
+          <span className="text-xs bg-[#282828] text-neutral-300 px-2.5 py-1 rounded-full font-bold">
+            v1.2.0-stable
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-white">Rejoignez la communauté de développement de Scrap !</p>
+            <p className="text-xs text-[#b3b3b3] leading-relaxed">
+              Scrap est un lecteur audio intelligent, propulsé par des algorithmes de recherche prédictive LTR (Learning to Rank) et une intégration de streaming YouTube Music fluide. 
+            </p>
+            <p className="text-xs text-[#b3b3b3] leading-relaxed">
+              Consultez le code source sur GitHub pour contribuer, signaler des bugs ou proposer de nouvelles fonctionnalités, et rejoignez notre serveur Discord pour échanger avec d'autres passionnés !
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-4 justify-end">
+            {/* GitHub button */}
+            <a
+              href="https://github.com/Mrgabin/Scrap"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 max-w-[200px] py-3 px-5 rounded-full bg-[#242424] hover:bg-[#2e2e2e] text-white text-sm font-bold flex items-center justify-center gap-2 transition-all border border-transparent hover:border-white/10 shadow-lg hover:scale-105 active:scale-95"
+              id="settings_github_btn"
+            >
+              <Github className="w-5 h-5 text-white" />
+              GitHub
+            </a>
+
+            {/* Discord button */}
+            <button
+              type="button"
+              className="flex-1 max-w-[200px] py-3 px-5 rounded-full bg-[#5865F2]/10 hover:bg-[#5865F2]/20 text-[#5865F2] text-sm font-bold flex items-center justify-center gap-2 transition-all border border-[#5865F2]/20 hover:border-[#5865F2]/40 cursor-pointer shadow-lg hover:scale-105 active:scale-95"
+              id="settings_discord_btn"
+              onClick={() => {
+                alert("Le serveur Discord Scrap arrive très bientôt ! Restez connectés.");
+              }}
+            >
+              <svg className="w-5 h-5 fill-current" viewBox="0 0 127.14 96.36" xmlns="http://www.w3.org/2000/svg">
+                <path d="M107.7,8.07A105.15,105.15,0,0,0,77.26,0a77.19,77.19,0,0,0-3.3,6.83A96.67,96.67,0,0,0,53.18,6.83,77.19,77.19,0,0,0,49.88,0,105.15,105.15,0,0,0,19.44,8.07C3.66,31.58-1.86,54.65,1,77.53A105.73,105.73,0,0,0,32,96.36a77.7,77.7,0,0,0,6.63-10.85,68.43,68.43,0,0,1-10.5-5c.88-.65,1.72-1.34,2.51-2a75.58,75.58,0,0,0,73,0c.79.71,1.63,1.4,2.51,2a68.43,68.43,0,0,1-10.5,5,77.7,77.7,0,0,0,6.63,10.85,105.73,105.73,0,0,0,31.06-18.83C129.87,48.12,122.94,25.35,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5.14-12.69,11.41-12.69S53.9,46,53.8,53,48.72,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.24,60,73.24,53s5.14-12.69,11.41-12.69S96.13,46,96,53,91,65.69,84.69,65.69Z"/>
+              </svg>
+              Discord
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Danger Zone Section */}

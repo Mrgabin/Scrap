@@ -167,7 +167,7 @@ export default function Player({
               shuffleMode === 0 
                 ? "Activer la lecture aléatoire" 
                 : shuffleMode === 1 
-                  ? (isLikedSongsContext ? "Activer l'Aléatoire Intelligent (Smart Shuffle)" : "Désactiver la lecture aléatoire")
+                  ? "Activer l'Aléatoire Intelligent (Smart Shuffle)"
                   : "Désactiver l'Aléatoire Intelligent (Smart Shuffle)"
             }
           >

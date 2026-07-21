@@ -8,7 +8,8 @@ import {
   Heart, 
   Settings, 
   LogOut, 
-  Disc 
+  Disc,
+  Github
 } from "lucide-react";
 import { Playlist, Track } from "../types";
 import { auth } from "../firebase";
@@ -166,21 +167,22 @@ export default function Sidebar({
                         }`}
                       >
                         <div className="w-9 h-9 rounded-full bg-neutral-800 flex items-center justify-center font-bold text-neutral-400 text-xs shrink-0 uppercase border border-neutral-700/60 overflow-hidden">
-                          {artistAvatars && artistAvatars[artistName] ? (
-                            <img 
-                              referrerPolicy="no-referrer" 
-                              src={artistAvatars[artistName]} 
-                              alt={artistName} 
-                              className="w-full h-full object-cover animate-fade-in" 
-                              onError={(e) => {
-                                const target = e.currentTarget;
-                                target.onerror = null;
-                                target.src = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80";
-                              }}
-                            />
-                          ) : (
-                            <span>{artistName.charAt(0)}</span>
-                          )}
+                          {(() => {
+                            const avatarUrl = (artistAvatars && artistAvatars[artistName]) || getDeterministicArtistAvatar(artistName);
+                            return (
+                              <img 
+                                referrerPolicy="no-referrer" 
+                                src={avatarUrl} 
+                                alt={artistName} 
+                                className="w-full h-full object-cover animate-fade-in" 
+                                onError={(e) => {
+                                  const target = e.currentTarget;
+                                  target.onerror = null;
+                                  target.src = getDeterministicArtistAvatar(artistName);
+                                }}
+                              />
+                            );
+                          })()}
                         </div>
                         <div className="overflow-hidden">
                           <p className="font-semibold text-xs truncate text-white">{artistName}</p>
@@ -197,6 +199,41 @@ export default function Sidebar({
 
 
 
+      </div>
+
+      {/* En savoir plus (Discord & GitHub) */}
+      <div className="bg-[#0a0a14]/30 backdrop-blur-md rounded-lg p-4 border border-white/5 shadow-xl flex flex-col gap-2.5 shrink-0" id="sidebar_about_section">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">En savoir plus</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* GitHub button */}
+          <a
+            href="https://github.com/Mrgabin/Scrap"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 py-2 px-3 rounded-md bg-[#242424] hover:bg-[#2e2e2e] text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all border border-transparent hover:border-white/10"
+            id="sidebar_github_btn"
+          >
+            <Github className="w-4 h-4 text-white" />
+            GitHub
+          </a>
+          
+          {/* Discord button */}
+          <button
+            type="button"
+            className="flex-1 py-2 px-3 rounded-md bg-[#5865F2]/10 hover:bg-[#5865F2]/20 text-[#5865F2] text-xs font-semibold flex items-center justify-center gap-1.5 transition-all border border-[#5865F2]/20 hover:border-[#5865F2]/40 cursor-pointer"
+            id="sidebar_discord_btn"
+            onClick={() => {
+              alert("Le serveur Discord Scrap arrive très bientôt ! Restez connectés.");
+            }}
+          >
+            <svg className="w-4 h-4 fill-current" viewBox="0 0 127.14 96.36" xmlns="http://www.w3.org/2000/svg">
+              <path d="M107.7,8.07A105.15,105.15,0,0,0,77.26,0a77.19,77.19,0,0,0-3.3,6.83A96.67,96.67,0,0,0,53.18,6.83,77.19,77.19,0,0,0,49.88,0,105.15,105.15,0,0,0,19.44,8.07C3.66,31.58-1.86,54.65,1,77.53A105.73,105.73,0,0,0,32,96.36a77.7,77.7,0,0,0,6.63-10.85,68.43,68.43,0,0,1-10.5-5c.88-.65,1.72-1.34,2.51-2a75.58,75.58,0,0,0,73,0c.79.71,1.63,1.4,2.51,2a68.43,68.43,0,0,1-10.5,5,77.7,77.7,0,0,0,6.63,10.85,105.73,105.73,0,0,0,31.06-18.83C129.87,48.12,122.94,25.35,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5.14-12.69,11.41-12.69S53.9,46,53.8,53,48.72,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.24,60,73.24,53s5.14-12.69,11.41-12.69S96.13,46,96,53,91,65.69,84.69,65.69Z"/>
+            </svg>
+            Discord
+          </button>
+        </div>
       </div>
     </nav>
   );

@@ -244,24 +244,25 @@ export default function HomeView({
                 className="bg-[#181818] p-4 rounded-xl hover:bg-[#282828] transition-all duration-300 cursor-pointer flex flex-col items-center text-center shrink-0 w-36 border border-transparent hover:border-neutral-800"
               >
                 <div className="w-24 h-24 rounded-full bg-neutral-800 flex items-center justify-center font-bold text-3xl text-neutral-400 shadow-xl mb-3 relative group overflow-hidden border border-neutral-700/60">
-                  {artistAvatars && artistAvatars[artist] ? (
-                    <>
-                      <img 
-                        referrerPolicy="no-referrer" 
-                        src={artistAvatars[artist]} 
-                        alt={artist} 
-                        className="w-full h-full object-cover animate-fade-in" 
-                        onError={(e) => {
-                          const target = e.currentTarget;
-                          target.onerror = null;
-                          target.src = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80";
-                        }}
-                      />
-                      <div className="absolute inset-0 bg-black/15 group-hover:bg-black/0 transition-colors" />
-                    </>
-                  ) : (
-                    <span>{artist.charAt(0)}</span>
-                  )}
+                  {(() => {
+                    const avatarUrl = (artistAvatars && artistAvatars[artist]) || getDeterministicArtistAvatar(artist);
+                    return (
+                      <>
+                        <img 
+                          referrerPolicy="no-referrer" 
+                          src={avatarUrl} 
+                          alt={artist} 
+                          className="w-full h-full object-cover animate-fade-in" 
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            target.onerror = null;
+                            target.src = getDeterministicArtistAvatar(artist);
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-black/15 group-hover:bg-black/0 transition-colors" />
+                      </>
+                    );
+                  })()}
                 </div>
                 <p className="font-bold text-xs text-white truncate w-full">{artist}</p>
                 <p className="text-[10px] text-[#1DB954] font-medium mt-1 uppercase tracking-wider">Abonné</p>

@@ -271,7 +271,7 @@ export default function PlaylistView({
                 shuffleMode === 0 
                   ? "Activer la lecture aléatoire" 
                   : shuffleMode === 1 
-                    ? (isLikedSongs ? "Activer l'Aléatoire Intelligent (Smart Shuffle)" : "Désactiver la lecture aléatoire")
+                    ? "Activer l'Aléatoire Intelligent (Smart Shuffle)"
                     : "Désactiver l'Aléatoire Intelligent (Smart Shuffle)"
               }
             >

@@ -13,12 +13,11 @@ try {
     writable: true,
     value: function (input: any, init: any) {
       if (typeof input === 'string' && input.startsWith('/api/')) {
-        const apiBase = (import.meta as any).env?.VITE_API_URL || '';
+        const apiBase = (import.meta as any).env?.VITE_API_URL || 'https://ais-pre-3re3syoufvl3dnr43mbpxi-649647222582.europe-west2.run.app';
         if (apiBase) {
           try {
             const currentHost = window.location.hostname;
             const apiHost = new URL(apiBase).hostname;
-            // If we are on an external static hosting domain, route /api calls to the Cloud Run backend!
             if (currentHost !== apiHost && currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
               input = `${apiBase}${input}`;
             }
@@ -35,7 +34,7 @@ try {
   try {
     (window as any).fetch = function (input: any, init: any) {
       if (typeof input === 'string' && input.startsWith('/api/')) {
-        const apiBase = (import.meta as any).env?.VITE_API_URL || '';
+        const apiBase = (import.meta as any).env?.VITE_API_URL || 'https://ais-pre-3re3syoufvl3dnr43mbpxi-649647222582.europe-west2.run.app';
         if (apiBase) {
           try {
             const currentHost = window.location.hostname;

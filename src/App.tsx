@@ -1185,11 +1185,6 @@ export default function App() {
     }
     setActivePlaybackContext(contextType);
 
-    // If we are not playing from liked songs and smart shuffle is active, fall back to normal shuffle
-    if (contextType !== "liked" && shuffleMode === 2) {
-      setShuffleMode(1);
-    }
-
     // Reset shuffle states for the new session
     setShufflePlayedIds([track.id]);
     setSmartShuffleCount(0);
@@ -1198,13 +1193,13 @@ export default function App() {
       setPlayQueue(contextList);
       const idx = contextList.findIndex(t => t.id === track.id);
       setQueueIndex(idx !== -1 ? idx : 0);
-      if (shuffleMode === 2 && (contextType === "liked" || currentView === "liked-songs")) {
+      if (shuffleMode === 2) {
         calculateRecommendations(contextList);
       }
     } else {
       setPlayQueue([track]);
       setQueueIndex(0);
-      if (shuffleMode === 2 && (contextType === "liked" || currentView === "liked-songs")) {
+      if (shuffleMode === 2) {
         calculateRecommendations([track]);
       }
     }
@@ -1416,7 +1411,7 @@ export default function App() {
         setIsPlaying(true);
         setPlayTrigger(Date.now());
 
-      } else if (shuffleMode === 2 && (activePlaybackContext === "liked" || currentView === "liked-songs")) {
+      } else if (shuffleMode === 2) {
         // --- 2. Smart Shuffle (Lecture Aléatoire Intelligente / Mode IA) ---
         // Play EXCLUSIVELY from the generated recommendations list (mood matching but never the same as playlist)
         const eligibleRecommendations = recommendations.filter(rec => {
@@ -1514,17 +1509,12 @@ export default function App() {
   };
 
   const handleShuffleToggle = () => {
-    const isLikedContext = (currentView === "liked-songs" || activePlaybackContext === "liked");
     setShuffleMode(prev => {
       let nextMode = 0;
       if (prev === 0) {
         nextMode = 1; // standard shuffle
       } else if (prev === 1) {
-        if (isLikedContext) {
-          nextMode = 2; // smart shuffle
-        } else {
-          nextMode = 0; // off
-        }
+        nextMode = 2; // smart shuffle (Mode IA available everywhere)
       } else {
         nextMode = 0; // off
       }

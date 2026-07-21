@@ -486,37 +486,233 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
   let bio = hasKnown?.bio || "";
   let channelId = "";
 
-  // 1. Try to fetch from Wikipedia first (since it has high-quality public domain portraits of artists)
+  // --- 1. PRIORITIZE YOUTUBE SCRAPING TO GET THE REAL OFFICIAL ARTIST PROFILE PICTURE ---
+  let ytAvatar = "";
   try {
-    const wikiUrl = `https://fr.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(artistName)}&gsrlimit=1&prop=pageimages&piprop=original&format=json&origin=*`;
-    const wikiResponse = await fetch(wikiUrl, {
-      signal: AbortSignal.timeout(2000),
-      headers: {
-        "User-Agent": "ScrapUp/1.0 (ytgabgal@gmail.com) Node/fetch"
+    // We try a single regular YouTube search first, because it's the fastest and most likely to contain the actual official channel AND official videos
+    let searchHtml = "";
+    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(artistName)}`;
+    try {
+      const response = await fetch(searchUrl, {
+        signal: AbortSignal.timeout(3000),
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+          "Cache-Control": "no-cache",
+          "Cookie": "SOCS=CAESEwgDEgk0ODE3Nzk3NTQaAmZyIAEaBgiA_K6ZBg; CONSENT=YES+cb.20210328-17-p0.en+FX+917"
+        }
+      });
+      if (response.ok) {
+        searchHtml = await response.text();
       }
-    });
-    if (wikiResponse.ok) {
-      const wikiData = await wikiResponse.json();
-      const pages = wikiData?.query?.pages;
-      if (pages) {
-        const pageId = Object.keys(pages)[0];
-        const originalImg = pages[pageId]?.original?.source;
-        if (originalImg) {
-          avatarUrl = originalImg;
-          console.log(`[Wikipedia API fr] Found official avatarUrl for ${artistName}: ${avatarUrl}`);
+    } catch (e) {
+      console.log(`[YT profile info] Regular search failed or timed out for "${artistName}"`);
+    }
+
+    if (searchHtml) {
+      const data = extractYtInitialData(searchHtml);
+      if (data) {
+        // Deep search helper for channelRenderers
+        const channels: any[] = [];
+        const findChannels = (obj: any) => {
+          if (!obj || typeof obj !== "object") return;
+          if (obj.channelRenderer) {
+            channels.push(obj.channelRenderer);
+          } else {
+            for (const key of Object.keys(obj)) {
+              findChannels(obj[key]);
+            }
+          }
+        };
+        findChannels(data);
+
+        if (channels.length > 0) {
+          // Find the best match, or default to the first one
+          const match = channels.find((c: any) => 
+            (c.title?.simpleText || "").toLowerCase().trim() === artistName.toLowerCase().trim()
+          ) || channels[0];
+
+          if (match) {
+            channelId = match.channelId || "";
+            const thumbs = match.thumbnail?.thumbnails;
+            if (thumbs && thumbs.length > 0) {
+              const sorted = thumbs.sort((a: any, b: any) => (b.width || 0) - (a.width || 0));
+              ytAvatar = sorted[0]?.url || "";
+            }
+            subscribersText = match.subscriberCountText?.simpleText || subscribersText;
+            console.log(`[YT Scraping] Found channelRenderer for ${artistName}, avatar: ${ytAvatar}`);
+          }
+        }
+
+        // If no channelRenderer found, fall back to the first videoRenderer's channel thumbnail!
+        if (!ytAvatar) {
+          const videos: any[] = [];
+          const findVideos = (obj: any) => {
+            if (!obj || typeof obj !== "object") return;
+            if (obj.videoRenderer) {
+              videos.push(obj.videoRenderer);
+            } else {
+              for (const key of Object.keys(obj)) {
+                findVideos(obj[key]);
+              }
+            }
+          };
+          findVideos(data);
+
+          if (videos.length > 0) {
+            const firstVideo = videos[0];
+            channelId = firstVideo.ownerText?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId || firstVideo.channelThumbnailSupportedRenderers?.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.browseId || "";
+            const videoChannelThumbs = firstVideo.channelThumbnailSupportedRenderers?.channelThumbnailWithLinkRenderer?.thumbnail?.thumbnails;
+            if (videoChannelThumbs && videoChannelThumbs.length > 0) {
+              const sorted = videoChannelThumbs.sort((a: any, b: any) => (b.width || 0) - (a.width || 0));
+              ytAvatar = sorted[0]?.url || "";
+              console.log(`[YT Scraping] Found videoRenderer fallback channel thumbnail for ${artistName}: ${ytAvatar}`);
+            }
+          }
         }
       }
     }
-  } catch (err: any) {
-    console.log(`[Wikipedia API fr info] Could not fetch artist profile for ${artistName}:`, err?.message || err);
+
+    // Try Channel-filtered search if regular search found nothing
+    if (!ytAvatar) {
+      let filterHtml = "";
+      const filterUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(artistName)}&sp=EgIQAg%253D%253D`;
+      try {
+        const response = await fetch(filterUrl, {
+          signal: AbortSignal.timeout(3000),
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Cookie": "SOCS=CAESEwgDEgk0ODE3Nzk3NTQaAmZyIAEaBgiA_K6ZBg; CONSENT=YES+cb.20210328-17-p0.en+FX+917"
+          }
+        });
+        if (response.ok) {
+          filterHtml = await response.text();
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      if (filterHtml) {
+        const data = extractYtInitialData(filterHtml);
+        if (data) {
+          const channels: any[] = [];
+          const findChannels = (obj: any) => {
+            if (!obj || typeof obj !== "object") return;
+            if (obj.channelRenderer) {
+              channels.push(obj.channelRenderer);
+            } else {
+              for (const key of Object.keys(obj)) {
+                findChannels(obj[key]);
+              }
+            }
+          };
+          findChannels(data);
+
+          if (channels.length > 0) {
+            const match = channels.find((c: any) => 
+              (c.title?.simpleText || "").toLowerCase().trim() === artistName.toLowerCase().trim()
+            ) || channels[0];
+
+            if (match) {
+              channelId = match.channelId || "";
+              const thumbs = match.thumbnail?.thumbnails;
+              if (thumbs && thumbs.length > 0) {
+                const sorted = thumbs.sort((a: any, b: any) => (b.width || 0) - (a.width || 0));
+                ytAvatar = sorted[0]?.url || "";
+              }
+              subscribersText = match.subscriberCountText?.simpleText || subscribersText;
+              console.log(`[YT Filter Scraping] Found channel for ${artistName}, avatar: ${ytAvatar}`);
+            }
+          }
+        }
+      }
+    }
+
+    // Retrieve official banner AND ultra high-resolution avatar from the YouTube Channel homepage if channelId was found
+    if (channelId) {
+      let chanHtml = "";
+      try {
+        const channelPageUrl = `https://www.youtube.com/channel/${channelId}`;
+        const chanResponse = await fetch(channelPageUrl, {
+          signal: AbortSignal.timeout(3000),
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Cache-Control": "no-cache"
+          }
+        });
+        if (chanResponse.ok) {
+          chanHtml = await chanResponse.text();
+        }
+      } catch (e) {
+        console.log(`[YT Channel Page] Fetch failed or timed out for "${artistName}" channel ${channelId}`);
+      }
+
+      if (chanHtml) {
+        const chanData = extractYtInitialData(chanHtml);
+        if (chanData) {
+          // Extract the channel banner
+          const header = chanData.header;
+          if (header) {
+            const headerRenderer = header.c4TabbedHeaderRenderer || header.carouselHeaderRenderer;
+            if (headerRenderer && headerRenderer.banner) {
+              const bannerThumbnails = headerRenderer.banner.thumbnails;
+              if (bannerThumbnails && bannerThumbnails.length > 0) {
+                const sortedBanners = bannerThumbnails.sort((a: any, b: any) => (b.width || 0) - (a.width || 0));
+                bannerUrl = sortedBanners[0]?.url || bannerUrl;
+              }
+            } else if (header.pageHeaderRenderer) {
+              const phr = header.pageHeaderRenderer;
+              const bannerVM = phr.content?.pageHeaderViewModel?.banner?.imageBannerViewModel;
+              if (bannerVM && bannerVM.image && bannerVM.image.sources) {
+                const sortedBanners = bannerVM.image.sources.sort((a: any, b: any) => (b.width || 0) - (a.width || 0));
+                bannerUrl = sortedBanners[0]?.url || bannerUrl;
+              }
+            }
+
+            // Extract the channel official avatar (often highest-res)
+            if (headerRenderer && headerRenderer.avatar) {
+              const avatarThumbnails = headerRenderer.avatar.thumbnails;
+              if (avatarThumbnails && avatarThumbnails.length > 0) {
+                const sortedAvatars = avatarThumbnails.sort((a: any, b: any) => (b.width || 0) - (a.width || 0));
+                ytAvatar = sortedAvatars[0]?.url || ytAvatar;
+                console.log(`[YT Channel Page] Found high-res avatar in c4TabbedHeaderRenderer: ${ytAvatar}`);
+              }
+            } else if (header.pageHeaderRenderer) {
+              const phr = header.pageHeaderRenderer;
+              const avatarVM = phr.content?.pageHeaderViewModel?.avatar?.imageAvatarViewModel?.avatar?.image;
+              if (avatarVM && avatarVM.sources && avatarVM.sources.length > 0) {
+                const sortedAvatars = avatarVM.sources.sort((a: any, b: any) => (b.width || 0) - (a.width || 0));
+                ytAvatar = sortedAvatars[0]?.url || ytAvatar;
+                console.log(`[YT Channel Page] Found high-res avatar in pageHeaderRenderer: ${ytAvatar}`);
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`[YT Scraper Error] Failed to scrape YouTube profile details for ${artistName}:`, err);
   }
 
-  // If French Wikipedia didn't have it, try English Wikipedia
+  // Upgrade to ultra high-resolution
+  if (ytAvatar) {
+    if (ytAvatar.startsWith("//")) ytAvatar = "https:" + ytAvatar;
+    // Upgrade =s88, =s176, =s240 etc to =s512
+    avatarUrl = ytAvatar.replace(/=s\d+-[^]+$/, "=s512-c-k-c0x00ffffff-no-rj")
+                        .replace(/\/s\d+-c/, "/s512-c")
+                        .replace(/=s\d+/, "=s512");
+    console.log(`[YT Scraper Success] Official YouTube profile photo found & upgraded for ${artistName}: ${avatarUrl}`);
+  }
+
+  // --- 2. FALLBACKS (ONLY IF YOUTUBE SCRAPER RETURNED NOTHING) ---
   if (!avatarUrl) {
+    // 1. Try to fetch from French Wikipedia
     try {
-      const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(artistName)}&gsrlimit=1&prop=pageimages&piprop=original&format=json&origin=*`;
+      const wikiUrl = `https://fr.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(artistName)}&gsrlimit=1&prop=pageimages&piprop=original&format=json&origin=*`;
       const wikiResponse = await fetch(wikiUrl, {
-        signal: AbortSignal.timeout(2000),
+        signal: AbortSignal.timeout(1500),
         headers: {
           "User-Agent": "ScrapUp/1.0 (ytgabgal@gmail.com) Node/fetch"
         }
@@ -529,216 +725,92 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
           const originalImg = pages[pageId]?.original?.source;
           if (originalImg) {
             avatarUrl = originalImg;
-            console.log(`[Wikipedia API en] Found official avatarUrl for ${artistName}: ${avatarUrl}`);
+            console.log(`[Wikipedia API fr Fallback] Found avatarUrl for ${artistName}: ${avatarUrl}`);
           }
         }
       }
     } catch (err: any) {
-      console.log(`[Wikipedia API en info] Could not fetch artist profile for ${artistName}:`, err?.message || err);
-    }
-  }
-
-  // 2. Try to fetch the official artist profile image from Deezer API if Wikipedia returned nothing
-  if (!avatarUrl) {
-    try {
-      const deezerResponse = await fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(artistName)}`, {
-        signal: AbortSignal.timeout(2000),
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-      });
-      const deezerData = await deezerResponse.json();
-      if (deezerData && deezerData.data && deezerData.data.length > 0) {
-        // Find the best matching artist name or default to first
-        const match = deezerData.data.find(
-          (a: any) => a.name.toLowerCase().trim() === artistName.toLowerCase().trim()
-        ) || deezerData.data[0];
-        
-        if (match) {
-          avatarUrl = match.picture_xl || match.picture_big || match.picture_medium || match.picture || "";
-          if (avatarUrl) {
-            console.log(`[Deezer API] Found official avatarUrl for ${artistName}: ${avatarUrl}`);
-          }
-        }
-      }
-    } catch (deezerError: any) {
-      console.log(`[Deezer API info] Could not fetch artist profile for ${artistName}:`, deezerError?.message || deezerError);
-    }
-  }
-
-  // 3. Try to fetch from iTunes Search API as a high-quality music metadata fallback if still no avatar
-  if (!avatarUrl) {
-    try {
-      const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&entity=album&limit=1`;
-      const itunesResponse = await fetch(itunesUrl, {
-        signal: AbortSignal.timeout(2000),
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-      });
-      if (itunesResponse.ok) {
-        const itunesData = await itunesResponse.json();
-        if (itunesData.results && itunesData.results.length > 0) {
-          const artwork = itunesData.results[0].artworkUrl100;
-          if (artwork) {
-            avatarUrl = artwork.replace("100x100bb.jpg", "600x600bb.jpg");
-            console.log(`[iTunes API] Found official release artwork for ${artistName}: ${avatarUrl}`);
-          }
-        }
-      }
-    } catch (itunesError: any) {
-      console.log(`[iTunes API info] Could not fetch artist profile for ${artistName}:`, itunesError?.message || itunesError);
-    }
-  }
-
-  // Perform a YouTube channel search for the artist to scrape real avatar and channel details
-  // Keep each sub-fetch highly isolated with shorter timeouts to fail fast and avoid sequential blockages
-  try {
-    let searchHtml = "";
-    try {
-      const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(artistName)}&sp=EgIQAg%253D%253D`;
-      const response = await fetch(searchUrl, {
-        signal: AbortSignal.timeout(3500),
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
-          "Cache-Control": "no-cache",
-          "Cookie": "SOCS=CAESEwgDEgk0ODE3Nzk3NTQaAmZyIAEaBgiA_K6ZBg; CONSENT=YES+cb.20210328-17-p0.en+FX+917"
-        }
-      });
-      if (response.ok) {
-        searchHtml = await response.text();
-      }
-    } catch (e) {
-      console.log(`[YT profile status info] Filtered search for "${artistName}"`);
+      console.log(`[Wikipedia API fr Fallback info] Could not fetch artist profile for ${artistName}:`, err?.message || err);
     }
 
-    if (searchHtml) {
+    // 2. Try English Wikipedia
+    if (!avatarUrl) {
       try {
-        const data = extractYtInitialData(searchHtml);
-        if (data) {
-          const searchResultsRenderer = data.contents?.twoColumnSearchResultsRenderer || data.contents?.twoColumnSearchResultRenderer;
-          const contents = searchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
-          if (contents) {
-            const itemSection = contents.find((c: any) => c.itemSectionRenderer);
-            if (itemSection) {
-              const items = itemSection.itemSectionRenderer.contents;
-              const channelItem = items.find((i: any) => i.channelRenderer);
-              if (channelItem) {
-                const cr = channelItem.channelRenderer;
-                channelId = cr.channelId || "";
-                const ytAvatar = cr.thumbnail?.thumbnails?.sort((a: any, b: any) => (b.width || 0) - (a.width || 0))[0]?.url || "";
-                if (!avatarUrl && ytAvatar) {
-                  avatarUrl = ytAvatar;
-                }
-                subscribersText = cr.subscriberCountText?.simpleText || subscribersText;
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.log(`[YT profile parser info] Filtered search for ${artistName}`);
-      }
-    }
-
-    // Fallback if channel renderer search filter didn't work (try regular search)
-    if (!channelId) {
-      let regHtml = "";
-      try {
-        const regularUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(artistName)}`;
-        const regResponse = await fetch(regularUrl, {
-          signal: AbortSignal.timeout(3500),
+        const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(artistName)}&gsrlimit=1&prop=pageimages&piprop=original&format=json&origin=*`;
+        const wikiResponse = await fetch(wikiUrl, {
+          signal: AbortSignal.timeout(1500),
           headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7"
+            "User-Agent": "ScrapUp/1.0 (ytgabgal@gmail.com) Node/fetch"
           }
         });
-        if (regResponse.ok) {
-          regHtml = await regResponse.text();
-        }
-      } catch (e) {
-        console.log(`[YT profile status info] Regular search for "${artistName}"`);
-      }
-
-      if (regHtml) {
-        try {
-          const regData = extractYtInitialData(regHtml);
-          if (regData) {
-            const searchResultsRenderer = regData.contents?.twoColumnSearchResultsRenderer || regData.contents?.twoColumnSearchResultRenderer;
-            const contents = searchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
-            if (contents) {
-              const itemSection = contents.find((c: any) => c.itemSectionRenderer);
-              if (itemSection) {
-                const items = itemSection.itemSectionRenderer.contents;
-                const channelItem = items.find((i: any) => i.channelRenderer);
-                if (channelItem) {
-                  const cr = channelItem.channelRenderer;
-                  channelId = cr.channelId || "";
-                  const ytAvatar = cr.thumbnail?.thumbnails?.sort((a: any, b: any) => (b.width || 0) - (a.width || 0))[0]?.url || "";
-                  if (!avatarUrl && ytAvatar) {
-                    avatarUrl = ytAvatar;
-                  }
-                  subscribersText = cr.subscriberCountText?.simpleText || subscribersText;
-                }
-              }
+        if (wikiResponse.ok) {
+          const wikiData = await wikiResponse.json();
+          const pages = wikiData?.query?.pages;
+          if (pages) {
+            const pageId = Object.keys(pages)[0];
+            const originalImg = pages[pageId]?.original?.source;
+            if (originalImg) {
+              avatarUrl = originalImg;
+              console.log(`[Wikipedia API en Fallback] Found avatarUrl for ${artistName}: ${avatarUrl}`);
             }
           }
-        } catch (e) {
-          console.log(`[YT profile parser info] Regular search for ${artistName}`);
         }
+      } catch (err: any) {
+        console.log(`[Wikipedia API en Fallback info] Could not fetch artist profile for ${artistName}:`, err?.message || err);
       }
     }
 
-    // Retrieve official banner from YouTube Channel homepage if channelId was found
-    if (channelId) {
-      let chanHtml = "";
+    // 3. Try Deezer API
+    if (!avatarUrl) {
       try {
-        const channelPageUrl = `https://www.youtube.com/channel/${channelId}`;
-        const chanResponse = await fetch(channelPageUrl, {
-          signal: AbortSignal.timeout(3500),
+        const deezerResponse = await fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(artistName)}`, {
+          signal: AbortSignal.timeout(1500),
           headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Cache-Control": "no-cache"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
           }
         });
-        if (chanResponse.ok) {
-          chanHtml = await chanResponse.text();
-        }
-      } catch (e) {
-        console.log(`[YT profile channel info] fetch for "${artistName}"`);
-      }
-
-      if (chanHtml) {
-        try {
-          const chanData = extractYtInitialData(chanHtml);
-          if (chanData) {
-            const header = chanData.header;
-            if (header) {
-              const headerRenderer = header.c4TabbedHeaderRenderer || header.carouselHeaderRenderer;
-              if (headerRenderer && headerRenderer.banner) {
-                const bannerThumbnails = headerRenderer.banner.thumbnails;
-                if (bannerThumbnails && bannerThumbnails.length > 0) {
-                  const sortedBanners = bannerThumbnails.sort((a: any, b: any) => (b.width || 0) - (a.width || 0));
-                  bannerUrl = sortedBanners[0]?.url || bannerUrl;
-                }
-              } else if (header.pageHeaderRenderer) {
-                const phr = header.pageHeaderRenderer;
-                const bannerVM = phr.content?.pageHeaderViewModel?.banner?.imageBannerViewModel;
-                if (bannerVM && bannerVM.image && bannerVM.image.sources) {
-                  const sortedBanners = bannerVM.image.sources.sort((a: any, b: any) => (b.width || 0) - (a.width || 0));
-                  bannerUrl = sortedBanners[0]?.url || bannerUrl;
-                }
-              }
+        const deezerData = await deezerResponse.json();
+        if (deezerData && deezerData.data && deezerData.data.length > 0) {
+          const match = deezerData.data.find(
+            (a: any) => a.name.toLowerCase().trim() === artistName.toLowerCase().trim()
+          ) || deezerData.data[0];
+          
+          if (match) {
+            avatarUrl = match.picture_xl || match.picture_big || match.picture_medium || match.picture || "";
+            if (avatarUrl) {
+              console.log(`[Deezer API Fallback] Found official avatarUrl for ${artistName}: ${avatarUrl}`);
             }
           }
-        } catch (e) {
-          console.log(`[YT profile parser info] Channel page for ${artistName}`);
         }
+      } catch (deezerError: any) {
+        console.log(`[Deezer API Fallback info] Could not fetch artist profile for ${artistName}:`, deezerError?.message || deezerError);
       }
     }
-  } catch (error) {
-    console.log(`[YT profile scraper info] Scraping channel for artist "${artistName}"`);
+
+    // 4. Try iTunes Search API
+    if (!avatarUrl) {
+      try {
+        const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&entity=album&limit=1`;
+        const itunesResponse = await fetch(itunesUrl, {
+          signal: AbortSignal.timeout(1500),
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          }
+        });
+        if (itunesResponse.ok) {
+          const itunesData = await itunesResponse.json();
+          if (itunesData.results && itunesData.results.length > 0) {
+            const artwork = itunesData.results[0].artworkUrl100;
+            if (artwork) {
+              avatarUrl = artwork.replace("100x100bb.jpg", "600x600bb.jpg");
+              console.log(`[iTunes API Fallback] Found official release artwork for ${artistName}: ${avatarUrl}`);
+            }
+          }
+        }
+      } catch (itunesError: any) {
+        console.log(`[iTunes API Fallback info] Could not fetch artist profile for ${artistName}:`, itunesError?.message || itunesError);
+      }
+    }
   }
 
   // Ensure full protocol URL

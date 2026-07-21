@@ -38,6 +38,7 @@ import TectonicLavaBackground from "./components/TectonicLavaBackground";
 import QuantumCoreBackground from "./components/QuantumCoreBackground";
 import { useTranslation } from "./lib/LanguageContext";
 import { getDeterministicArtistAvatar } from "./lib/avatarHelper";
+import { analyzeTrackMetadata } from "./lib/profiler";
 
 import { 
   Sparkles, 
@@ -332,6 +333,21 @@ export default function App() {
 
   // Algorithmic & Taste Survey States
   const [tasteProfile, setTasteProfile] = useState<any>(null);
+  const [tasteScores, setTasteScores] = useState<any>(() => {
+    const saved = localStorage.getItem("spotify_taste_scores");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return {
+      genres: { rap: 10, pop: 10, electro: 10, rock: 10, lofi: 10 },
+      languages: { fr: 10, en: 10 },
+      rhythms: { fast: 10, medium: 10, slow: 10 },
+      eras: { "2020s": 10, "2010s": 10, "2000s": 10, classic: 10 },
+      artists: {}
+    };
+  });
   const [showTasteSurvey, setShowTasteSurvey] = useState(false);
   const [personalizedPlaylists, setPersonalizedPlaylists] = useState<Playlist[]>([]);
   const [loadingPersonalized, setLoadingPersonalized] = useState(false);
@@ -506,6 +522,128 @@ export default function App() {
     }
   }, [currentTrack]);
 
+  // --- Profilage IA & Listening Time Tracker ---
+  const activeListeningSecondsRef = useRef<number>(0);
+  const prevTrackForProfilingRef = useRef<Track | null>(null);
+
+  // Function to commit accumulated listening time and calculate positive/negative scores
+  const commitTrackListeningTime = (trackToCommit: Track, durationSec: number, listenedSec: number) => {
+    if (!trackToCommit) return;
+    
+    const ratio = durationSec > 0 ? listenedSec / durationSec : 0;
+    
+    // Determine score change
+    let scoreDelta = 0;
+    let actionLabel = "";
+    
+    if (listenedSec >= 45 || ratio >= 0.8) {
+      // Long listen or completion: strong positive signal!
+      scoreDelta = 2;
+      actionLabel = "AIME_BEAUCOUP";
+    } else if (listenedSec >= 15 || ratio >= 0.3) {
+      // Moderate listen: mild positive signal!
+      scoreDelta = 1;
+      actionLabel = "AIME_BIEN";
+    } else {
+      // Skipped within 15 seconds: strong negative signal!
+      scoreDelta = -1;
+      actionLabel = "AIME_PAS";
+    }
+    
+    updateTasteScores(trackToCommit, scoreDelta, actionLabel);
+  };
+
+  // Function to update user's taste scores across all 5 dimensions
+  const updateTasteScores = async (track: Track, delta: number, action: string) => {
+    const profile = analyzeTrackMetadata(track.title, track.artist);
+    
+    setTasteScores((prev: any) => {
+      const updated = { ...prev };
+      
+      // 1. Genre
+      const g = profile.genre;
+      updated.genres = { ...updated.genres };
+      updated.genres[g] = Math.max(0, (updated.genres[g] ?? 10) + delta);
+      
+      // 2. Language
+      const l = profile.language;
+      updated.languages = { ...updated.languages };
+      updated.languages[l] = Math.max(0, (updated.languages[l] ?? 10) + delta);
+      
+      // 3. Rhythm
+      const r = profile.rhythm;
+      updated.rhythms = { ...updated.rhythms };
+      updated.rhythms[r] = Math.max(0, (updated.rhythms[r] ?? 10) + delta);
+      
+      // 4. Era
+      const e = profile.era;
+      updated.eras = { ...updated.eras };
+      updated.eras[e] = Math.max(0, (updated.eras[e] ?? 10) + delta);
+      
+      // 5. Artist
+      const art = profile.artist;
+      updated.artists = { ...updated.artists };
+      updated.artists[art] = Math.max(0, (updated.artists[art] ?? 10) + delta);
+      
+      console.log(`[Profilage IA] Action: ${action} (+${delta} pts). Scores mis à jour :`, {
+        genre: `${g} (${updated.genres[g]} pts)`,
+        language: `${l} (${updated.languages[l]} pts)`,
+        rhythm: `${r} (${updated.rhythms[r]} pts)`,
+        era: `${e} (${updated.eras[e]} pts)`,
+        artist: `${art} (${updated.artists[art]} pts)`
+      });
+
+      // Save locally
+      localStorage.setItem("spotify_taste_scores", JSON.stringify(updated));
+
+      // Save to Firestore if connected
+      if (user && !user.isGuest) {
+        const docRef = doc(db, "users", user.uid);
+        updateDoc(docRef, { tasteScores: updated }).catch(err => {
+          console.error("Firestore TasteScores update failed:", err);
+        });
+      }
+
+      return updated;
+    });
+  };
+
+  // Real-time track listener to detect active seconds played
+  useEffect(() => {
+    let interval: any = null;
+    if (isPlaying && currentTrack) {
+      interval = setInterval(() => {
+        activeListeningSecondsRef.current += 1;
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isPlaying, currentTrack?.id]);
+
+  // Handle track changes & commit listening scores on change
+  useEffect(() => {
+    const oldTrack = prevTrackForProfilingRef.current;
+    const spentSec = activeListeningSecondsRef.current;
+    
+    if (oldTrack && spentSec > 0) {
+      let durSec = oldTrack.durationSec || 200;
+      if (typeof oldTrack.duration === 'string') {
+        const parts = oldTrack.duration.split(':');
+        if (parts.length === 2) {
+          const m = parseInt(parts[0], 10);
+          const s = parseInt(parts[1], 10);
+          if (!isNaN(m) && !isNaN(s)) durSec = m * 60 + s;
+        }
+      }
+      commitTrackListeningTime(oldTrack, durSec, spentSec);
+    }
+    
+    // Reset listening timer for the new track
+    activeListeningSecondsRef.current = 0;
+    prevTrackForProfilingRef.current = currentTrack;
+  }, [currentTrack?.id]);
+
   useEffect(() => {
     if (currentTrack) {
       localStorage.setItem("spotify_last_track", JSON.stringify(currentTrack));
@@ -595,6 +733,42 @@ export default function App() {
       }
     });
     return unsubscribe;
+  }, []);
+
+  // 1b. Check for shared playlist in URL parameters on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sharedId = params.get("sharedPlaylistId") || params.get("shared");
+    if (sharedId) {
+      const fetchSharedPlaylist = async () => {
+        try {
+          const docRef = doc(db, "sharedPlaylists", sharedId);
+          const snap = await getDoc(docRef);
+          if (snap.exists()) {
+            const data = snap.data();
+            const sharedPl = { id: snap.id, ...data } as Playlist;
+            setSelectedPlaylist(sharedPl);
+            setCurrentView(`playlist-${snap.id}`);
+            
+            // Clean URL query parameters so that refreshing or navigating doesn't lock the user on this playlist
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, document.title, newUrl);
+
+            setFirestoreError(`Playlist partagée "${sharedPl.name}" chargée avec succès !`);
+            setTimeout(() => setFirestoreError(null), 5000);
+          } else {
+            console.warn("Shared playlist not found:", sharedId);
+            setFirestoreError("La playlist partagée demandée n'existe pas ou a été supprimée.");
+            setTimeout(() => setFirestoreError(null), 5000);
+          }
+        } catch (err: any) {
+          console.error("Error loading shared playlist on mount:", err);
+          setFirestoreError(`Erreur lors du chargement de la playlist: ${err.message}`);
+          setTimeout(() => setFirestoreError(null), 5000);
+        }
+      };
+      fetchSharedPlaylist();
+    }
   }, []);
 
   // 2. Fetch User Data (Liked Songs & Playlists & History) dynamically
@@ -696,6 +870,10 @@ export default function App() {
           setTasteProfile(data.tasteProfile);
         } else {
           setTasteProfile(null);
+        }
+        if (data.tasteScores) {
+          setTasteScores(data.tasteScores);
+          localStorage.setItem("spotify_taste_scores", JSON.stringify(data.tasteScores));
         }
         if (data.customBackgroundUrl) {
           setCustomBackgroundUrl(data.customBackgroundUrl);
@@ -869,7 +1047,8 @@ export default function App() {
           followedArtists: followedArtists,
           searchHistory: searchHistory,
           tasteProfile: tasteProfile,
-          currentTracks: currentList.map(t => ({ title: t.title, artist: t.artist }))
+          currentTracks: currentList.map(t => ({ title: t.title, artist: t.artist })),
+          tasteScores: tasteScores
         })
       });
       if (!res.ok) {
@@ -1723,6 +1902,29 @@ export default function App() {
     }
   };
 
+  const handleSharePlaylist = async (playlistToShare: Playlist): Promise<string> => {
+    try {
+      const sharedRef = doc(collection(db, "sharedPlaylists"));
+      const sharedId = sharedRef.id;
+      
+      await setDoc(sharedRef, {
+        name: playlistToShare.name || "Playlist partagée",
+        description: playlistToShare.description || "",
+        coverColor: playlistToShare.coverColor || "#1DB954",
+        tracks: playlistToShare.tracks || [],
+        createdAt: new Date().toISOString()
+      });
+      
+      const shareUrl = `${window.location.origin}/?sharedPlaylistId=${sharedId}`;
+      return shareUrl;
+    } catch (err: any) {
+      console.error("Error sharing playlist:", err);
+      setFirestoreError(`Erreur de partage: ${err.message}`);
+      setTimeout(() => setFirestoreError(null), 5000);
+      throw err;
+    }
+  };
+
   const handleTasteSurveySubmit = async (profile: any) => {
     if (!user) return;
     setLoadingPersonalized(true);
@@ -2518,6 +2720,7 @@ export default function App() {
                     }
                   }
                 }}
+                tasteScores={tasteScores}
               />
             )}
 
@@ -2538,6 +2741,7 @@ export default function App() {
                 onOpenSpotifyImport={() => setShowSpotifyImportModal(true)}
                 shuffleMode={shuffleMode}
                 onShuffleToggle={handleShuffleToggle}
+                onSharePlaylist={handleSharePlaylist}
               />
             )}
 
@@ -2553,6 +2757,7 @@ export default function App() {
                 isCurated={!customPlaylists.some(p => p.id === selectedPlaylist.id)}
                 shuffleMode={shuffleMode}
                 onShuffleToggle={handleShuffleToggle}
+                onSharePlaylist={handleSharePlaylist}
               />
             )}
 

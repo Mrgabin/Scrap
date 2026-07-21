@@ -1586,35 +1586,71 @@ function detectGenreOfTracks(tracks: any[]): string {
   return "pop";
 }
 
+// Self-contained Track Profiler for recommendation personalization on the backend
+function backendAnalyzeTrack(title: string, artist: string) {
+  const cleanTitle = (title || "").toLowerCase().trim();
+  const cleanArtist = (artist || "").toLowerCase().trim();
+  const combined = `${cleanTitle} ${cleanArtist}`;
+
+  // 1. Language
+  let language = "en";
+  const frenchArtists = [
+    "sdm", "ninho", "gazo", "tiakola", "werenoi", "plk", "damso", "nekfeu", "booba", "sch", "pnl", 
+    "orelsan", "lomepal", "soprano", "aya nakamura", "stromae", "angèle", "angele", "clara luciani", 
+    "gims", "heuss", "jul", "koba", "femtogo", "dadju", "tayc", "franglish", "hamza"
+  ];
+  const frenchKeywords = ["le", "la", "les", "un", "une", "des", "du", "de", "et", "en", "que", "pour", "dans", "vie", "mène", "tchikita", "femme", "bois", "danse", "allemand"];
+  
+  if (frenchArtists.some(fa => cleanArtist.includes(fa)) || frenchKeywords.some(fk => {
+    const regex = new RegExp(`\\b${fk}\\b`, 'i');
+    return regex.test(cleanTitle);
+  })) {
+    language = "fr";
+  }
+
+  // 2. Genre
+  let genre = "pop";
+  if (["snowman", "lofi", "chill", "relax", "sleep", "ambient", "jinsang", "nujabes", "saib"].some(kw => combined.includes(kw))) {
+    genre = "lofi";
+  } else if (["queen", "nirvana", "ac/dc", "coldplay", "imagine dragons", "guns n' roses", "linkin park", "arctic monkeys", "måneskin", "radiohead", "rock", "metal", "creep"].some(kw => combined.includes(kw))) {
+    genre = "rock";
+  } else if (["daft punk", "stromae", "david guetta", "peggy gou", "fred again", "calvin harris", "kavinsky", "dj snake", "shouse", "electro", "techno", "house", "edm"].some(kw => combined.includes(kw))) {
+    genre = "electro";
+  } else if (["jul", "ninho", "gazo", "tiakola", "werenoi", "plk", "damso", "nekfeu", "booba", "sch", "pnl", "orelsan", "eminem", "drake", "travis scott", "central cee", "sdm", "rap", "hip-hop"].some(kw => combined.includes(kw))) {
+    genre = "rap";
+  }
+
+  // 3. Rhythm
+  let rhythm = "medium";
+  if (genre === "lofi" || ["sleep", "relax", "acoustic", "creep", "rain"].some(k => cleanTitle.includes(k))) {
+    rhythm = "slow";
+  } else if (genre === "electro" || ["fe!n", "bolide", "gazo", "moulaga", "dance", "remix"].some(k => combined.includes(k))) {
+    rhythm = "fast";
+  }
+
+  // 4. Era
+  let era = "2020s";
+  if (["queen", "ac/dc", "guns n' roses", "nirvana", "pink floyd", "led zeppelin", "beatles"].some(ca => cleanArtist.includes(ca))) {
+    era = "classic";
+  } else if (["linkin park", "daft punk", "eminem", "radiohead", "creep", "lose yourself"].some(kw => combined.includes(kw))) {
+    era = "2000s";
+  } else if (["ninho", "damso", "nekfeu", "stromae", "avicii", "david guetta", "calvin harris", "imagine dragons", "coldplay", "blinding lights", "starboy", "papaoutai"].some(kw => combined.includes(kw))) {
+    era = "2010s";
+  }
+
+  return { genre, language, rhythm, era, artist: cleanArtist };
+}
+
 // 3. AI Smart Recommendations ("Découvertes de la Semaine") API Endpoint
 app.post("/api/recommendations", async (req, res) => {
-  const { history, likes, followedArtists, searchHistory, tasteProfile, currentTracks } = req.body;
+  const { history, likes, followedArtists, searchHistory, tasteProfile, currentTracks, tasteScores } = req.body;
   const recentTracks = Array.isArray(history) ? history.slice(0, 15) : [];
   const userLikes = Array.isArray(likes) ? likes.slice(0, 15) : [];
   const activeTracks = Array.isArray(currentTracks) ? currentTracks : [];
 
-  // Determine dominant genre from current playing tracks/queue, or fallback to likes / history
-  let detectedGenre = "pop";
-  if (activeTracks.length > 0) {
-    detectedGenre = detectGenreOfTracks(activeTracks);
-  } else if (userLikes.length > 0) {
-    detectedGenre = detectGenreOfTracks(userLikes);
-  } else if (recentTracks.length > 0) {
-    detectedGenre = detectGenreOfTracks(recentTracks);
-  } else if (tasteProfile && Array.isArray(tasteProfile.genres) && tasteProfile.genres.length > 0) {
-    // Stated taste profile fallback
-    const primaryStated = String(tasteProfile.genres[0]).toLowerCase();
-    if (["rap", "pop", "electro", "rock", "lofi"].includes(primaryStated)) {
-      detectedGenre = primaryStated;
-    }
-  }
+  let recommendedList: { title: string; artist: string }[] = [];
 
-  console.log(`[Smart Shuffle] Detected dominant genre: "${detectedGenre}" for recommendations calculation.`);
-
-  // Get curated candidates for this genre
-  const candidates = POPULAR_GENRE_TRACKS[detectedGenre] || POPULAR_GENRE_TRACKS.pop;
-
-  // Filter out any candidates that are already present in user's likes, playlist/activeTracks, or history
+  // Helper check for already listened/present tracks to avoid duplicates
   const isAlreadyPresent = (cand: { title: string; artist: string }) => {
     const cleanCandTitle = cand.title.toLowerCase().trim();
     const cleanCandArtist = cand.artist.toLowerCase().trim();
@@ -1633,28 +1669,93 @@ app.post("/api/recommendations", async (req, res) => {
     return matchInList(activeTracks) || matchInList(userLikes) || matchInList(recentTracks);
   };
 
-  // Build filtered list of non-duplicated tracks
-  let filteredList = candidates.filter(cand => !isAlreadyPresent(cand));
+  if (tasteScores) {
+    // Advanced Scoring Mode: Rank all database candidates using the user's real-time affinity scores!
+    console.log("[Smart Profiling API] Calculating content-based affinity scores for candidates.");
+    
+    // Combine all popular tracks into one giant list of candidates
+    let allCandidates: { title: string; artist: string }[] = [];
+    Object.keys(POPULAR_GENRE_TRACKS).forEach(g => {
+      allCandidates = [...allCandidates, ...POPULAR_GENRE_TRACKS[g]];
+    });
 
-  // If we ran out of tracks in the dominant genre because the user already knows all of them,
-  // we fall back to other genres, keeping the exclusion filter active!
-  if (filteredList.length < 8) {
-    const otherGenres = Object.keys(POPULAR_GENRE_TRACKS).filter(g => g !== detectedGenre);
-    for (const otherG of otherGenres) {
-      const extraCandidates = POPULAR_GENRE_TRACKS[otherG];
-      const extraFiltered = extraCandidates.filter(cand => !isAlreadyPresent(cand));
-      filteredList = [...filteredList, ...extraFiltered];
-      if (filteredList.length >= 12) break;
-    }
+    // Filter out duplicates in pool
+    const uniquePool: { title: string; artist: string }[] = [];
+    const seenKeys = new Set<string>();
+    allCandidates.forEach(c => {
+      const key = `${c.title.toLowerCase().trim()} - ${c.artist.toLowerCase().trim()}`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        uniquePool.push(c);
+      }
+    });
+
+    // Score each candidate track
+    const scoredCandidates = uniquePool.map(cand => {
+      const prof = backendAnalyzeTrack(cand.title, cand.artist);
+      
+      const gScore = (tasteScores.genres?.[prof.genre]) ?? 10;
+      const lScore = (tasteScores.languages?.[prof.language]) ?? 10;
+      const rScore = (tasteScores.rhythms?.[prof.rhythm]) ?? 10;
+      const eScore = (tasteScores.eras?.[prof.era]) ?? 10;
+      const aScore = (tasteScores.artists?.[prof.artist]) ?? 10;
+      
+      const baseAffinity = gScore + lScore + rScore + eScore + aScore;
+      
+      // Add small random noise to keep the recommendations fresh and dynamic (exploration vs exploitation)
+      const noise = Math.random() * 4 - 2; // -2 to +2
+      const totalAffinity = baseAffinity + noise;
+      
+      return { cand, totalAffinity };
+    });
+
+    // Sort by affinity score descending
+    scoredCandidates.sort((a, b) => b.totalAffinity - a.totalAffinity);
+    
+    // Filter out already present or liked ones
+    const sortedTracks = scoredCandidates.map(sc => sc.cand);
+    const filteredList = sortedTracks.filter(cand => !isAlreadyPresent(cand));
+
+    // Pick top 8 matches
+    recommendedList = filteredList.slice(0, 8);
+    console.log(`[Smart Profiling API] Generated ${recommendedList.length} customized recommendations.`);
   }
 
-  // Shuffle the selection to make it dynamic and fun
-  const shuffledList = [...filteredList].sort(() => 0.5 - Math.random());
+  // Fallback to dominant genre if empty or score mode is missing
+  if (recommendedList.length === 0) {
+    let detectedGenre = "pop";
+    if (activeTracks.length > 0) {
+      detectedGenre = detectGenreOfTracks(activeTracks);
+    } else if (userLikes.length > 0) {
+      detectedGenre = detectGenreOfTracks(userLikes);
+    } else if (recentTracks.length > 0) {
+      detectedGenre = detectGenreOfTracks(recentTracks);
+    } else if (tasteProfile && Array.isArray(tasteProfile.genres) && tasteProfile.genres.length > 0) {
+      const primaryStated = String(tasteProfile.genres[0]).toLowerCase();
+      if (["rap", "pop", "electro", "rock", "lofi"].includes(primaryStated)) {
+        detectedGenre = primaryStated;
+      }
+    }
 
-  // Pick exactly 8 songs
-  const recommendedList = shuffledList.slice(0, 8);
+    console.log(`[Smart Shuffle Fallback] Detected dominant genre: "${detectedGenre}".`);
+    const candidates = POPULAR_GENRE_TRACKS[detectedGenre] || POPULAR_GENRE_TRACKS.pop;
+    let filteredList = candidates.filter(cand => !isAlreadyPresent(cand));
 
-  // If still empty (extremely rare fallback), use defaultSongs but make sure we do not fail
+    if (filteredList.length < 8) {
+      const otherGenres = Object.keys(POPULAR_GENRE_TRACKS).filter(g => g !== detectedGenre);
+      for (const otherG of otherGenres) {
+        const extraCandidates = POPULAR_GENRE_TRACKS[otherG];
+        const extraFiltered = extraCandidates.filter(cand => !isAlreadyPresent(cand));
+        filteredList = [...filteredList, ...extraFiltered];
+        if (filteredList.length >= 12) break;
+      }
+    }
+
+    const shuffledList = [...filteredList].sort(() => 0.5 - Math.random());
+    recommendedList = shuffledList.slice(0, 8);
+  }
+
+  // Final absolute safety fallback
   if (recommendedList.length === 0) {
     recommendedList.push(
       { title: "Blinding Lights", artist: "The Weeknd" },

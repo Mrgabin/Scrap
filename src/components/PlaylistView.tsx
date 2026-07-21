@@ -1,5 +1,5 @@
 import React from "react";
-import { Play, Trash2, Music, Clock, Sparkles, Search, SlidersHorizontal, Check, ArrowUp, ArrowDown, X, Shuffle } from "lucide-react";
+import { Play, Trash2, Music, Clock, Sparkles, Search, SlidersHorizontal, Check, ArrowUp, ArrowDown, X, Shuffle, Share2, Copy } from "lucide-react";
 import { Track, Playlist } from "../types";
 import PlaylistCover from "./PlaylistCover";
 
@@ -18,6 +18,9 @@ interface PlaylistViewProps {
   // Shuffle Mode Support
   shuffleMode?: number;
   onShuffleToggle?: () => void;
+
+  // Share Playlist Support
+  onSharePlaylist?: (playlist: Playlist) => Promise<string>;
 }
 
 export default function PlaylistView({
@@ -32,7 +35,8 @@ export default function PlaylistView({
   isCurated = false,
   onOpenSpotifyImport,
   shuffleMode = 0,
-  onShuffleToggle
+  onShuffleToggle,
+  onSharePlaylist
 }: PlaylistViewProps) {
   
   const isLikedSongs = playlist === null;
@@ -50,6 +54,45 @@ export default function PlaylistView({
   const [sortDirection, setSortDirection] = React.useState<"asc" | "desc">("asc");
   const [viewMode, setViewMode] = React.useState<"compact" | "list">("list");
   const [isSortMenuOpen, setIsSortMenuOpen] = React.useState(false);
+
+  // Share state
+  const [isSharing, setIsSharing] = React.useState(false);
+  const [shareUrl, setShareUrl] = React.useState("");
+  const [copied, setCopied] = React.useState(false);
+
+  const handleShare = async () => {
+    if (!onSharePlaylist) return;
+    setIsSharing(true);
+    setCopied(false);
+    try {
+      const plToShare = isLikedSongs 
+        ? {
+            id: "liked-" + Date.now(),
+            name: "Titres Likés",
+            description: "Mes morceaux préférés partagés",
+            coverColor: "#4f46e5",
+            tracks: likedTracks,
+          }
+        : playlist;
+        
+      if (plToShare) {
+        const url = await onSharePlaylist(plToShare);
+        setShareUrl(url);
+        // Try to copy to clipboard automatically
+        try {
+          await navigator.clipboard.writeText(url);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 3000);
+        } catch (clipErr) {
+          console.warn("Clipboard write failed:", clipErr);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to share playlist:", err);
+    } finally {
+      setIsSharing(false);
+    }
+  };
 
   // 1. Filter tracks based on search query
   const filteredTracks = React.useMemo(() => {
@@ -137,6 +180,19 @@ export default function PlaylistView({
             className="flex items-center gap-2 text-xs font-bold text-white hover:bg-[#1ed760]/20 bg-[#1DB954]/10 border border-[#1DB954]/40 hover:border-[#1DB954] rounded-full px-5 py-2.5 transition-all hover:scale-105 active:scale-95 self-end md:self-auto shrink-0 shadow-lg shadow-[#1db954]/5"
           >
             <Sparkles className="w-4 h-4 fill-current text-[#1DB954]" /> Transférer Spotify
+          </button>
+        )}
+
+        {/* Share Playlist button */}
+        {onSharePlaylist && (
+          <button
+            id="share_playlist_btn"
+            onClick={handleShare}
+            disabled={isSharing}
+            className="flex items-center gap-2 text-xs font-bold text-white hover:bg-white/10 bg-white/5 border border-neutral-700 hover:border-neutral-500 rounded-full px-5 py-2.5 transition-all hover:scale-105 active:scale-95 self-end md:self-auto shrink-0 shadow-lg disabled:opacity-50"
+          >
+            <Share2 className="w-4 h-4 text-neutral-300" />
+            {isSharing ? "Génération..." : "Partager"}
           </button>
         )}
       </div>
@@ -471,6 +527,74 @@ export default function PlaylistView({
           </div>
         )}
       </div>
+
+      {/* Share Playlist Modal */}
+      {shareUrl && (
+        <div className="fixed inset-0 bg-black/75 flex items-center justify-center p-4 z-50 animate-fadeIn" id="share_playlist_modal">
+          <div className="bg-[#181818] border border-neutral-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+            <button 
+              onClick={() => setShareUrl("")}
+              className="absolute top-4 right-4 text-neutral-400 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2.5 bg-[#1DB954]/10 rounded-xl text-[#1DB954]">
+                <Share2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg text-white">Lien de partage généré !</h3>
+                <p className="text-xs text-[#b3b3b3]">Partagez ce lien pour faire découvrir cette playlist.</p>
+              </div>
+            </div>
+
+            <div className="bg-black/40 rounded-lg p-3 border border-neutral-800 flex items-center justify-between gap-3 mb-6">
+              <input
+                type="text"
+                readOnly
+                value={shareUrl}
+                className="bg-transparent border-none outline-none text-xs text-neutral-200 w-full select-all font-mono"
+              />
+              <button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(shareUrl);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 3000);
+                  } catch (err) {
+                    console.error("Failed to copy link:", err);
+                  }
+                }}
+                className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full transition-all shrink-0 ${
+                  copied 
+                    ? "bg-[#1DB954]/20 text-[#1DB954] border border-[#1DB954]/30" 
+                    : "bg-[#1DB954] text-black hover:scale-105 active:scale-95"
+                }`}
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" /> Copié !
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-black" /> Copier
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShareUrl("")}
+                className="text-xs font-bold text-neutral-300 hover:text-white bg-[#282828] hover:bg-[#323232] px-5 py-2.5 rounded-full transition-colors"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

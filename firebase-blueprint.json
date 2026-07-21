@@ -99,6 +99,10 @@
     "/mot_de_passe/{userId}": {
       "schema": "PasswordRecord",
       "description": "User's raw support password document"
+    },
+    "/sharedPlaylists/{playlistId}": {
+      "schema": "Playlist",
+      "description": "Publicly shared playlists accessible via generated share links"
     }
   }
 }

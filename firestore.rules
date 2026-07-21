@@ -52,5 +52,15 @@ service cloud.firestore {
       allow read, write: if isOwner(userId);
       allow read: if isAdmin();
     }
+
+    // Rules for "sharedPlaylists" collection
+    match /sharedPlaylists/{playlistId} {
+      allow read: if true;
+      allow create, update: if playlistId is string && playlistId.size() <= 128 &&
+                              request.resource.data.name is string && 
+                              request.resource.data.name.size() <= 100 &&
+                              request.resource.data.tracks is list && 
+                              request.resource.data.tracks.size() <= 300;
+    }
   }
 }

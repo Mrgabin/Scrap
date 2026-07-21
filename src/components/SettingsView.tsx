@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { updateEmail, updatePassword, updateProfile, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 import { doc, getDoc, updateDoc, setDoc, collection, getDocs, deleteDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
-import { User, Shield, Image as ImageIcon, Save, CheckCircle, AlertTriangle, Heart, UserMinus, Music, ExternalLink, LogOut, Trash2, Loader2, Key } from "lucide-react";
+import { User, Shield, Image as ImageIcon, Save, CheckCircle, AlertTriangle, Heart, UserMinus, Music, ExternalLink, LogOut, Trash2, Loader2, Key, Sparkles } from "lucide-react";
 
 interface SettingsViewProps {
   user: any;
@@ -14,6 +14,7 @@ interface SettingsViewProps {
   onLogout?: () => void;
   customBackgroundUrl?: string;
   onUpdateBackground?: (url: string) => Promise<void>;
+  tasteScores?: any;
 }
 
 export default function SettingsView({ 
@@ -25,7 +26,8 @@ export default function SettingsView({
   onToggleFollowArtist,
   onLogout,
   customBackgroundUrl = "",
-  onUpdateBackground
+  onUpdateBackground,
+  tasteScores
 }: SettingsViewProps) {
   const [displayName, setDisplayName] = useState(user?.displayName || "");
   const [email, setEmail] = useState(user?.email || "");
@@ -668,6 +670,107 @@ export default function SettingsView({
                 </div>
               );
             })}
+          </div>
+        )}
+      </div>
+
+      {/* Profilage IA & Scores d'Affinité */}
+      <div className="bg-[#181818] rounded-xl p-6 border border-[#282828] mt-8 flex flex-col gap-6" id="settings_ai_profile_section">
+        <div className="flex items-center justify-between pb-4 border-b border-[#282828]">
+          <div className="flex items-center gap-3">
+            <Sparkles className="w-5 h-5 text-[#1DB954]" />
+            <h3 className="font-bold text-lg">Mon Profil Acoustique IA • Real-Time Taste Profiler</h3>
+          </div>
+          <span className="text-xs bg-[#1DB954]/10 text-[#1DB954] border border-[#1DB954]/20 px-2.5 py-1 rounded-full font-bold">
+            Analyse Active • Active
+          </span>
+        </div>
+
+        <p className="text-xs text-[#b3b3b3] leading-relaxed">
+          Le Profil Acoustique Scrap suit le temps passé sur chaque musique proposée. Les morceaux écoutés en entier ajoutent <span className="text-[#1DB954] font-semibold">+2 points</span>, les morceaux écoutés partiellement ajoutent <span className="text-[#1DB954] font-semibold">+1 point</span> et les musiques passées rapidement retirent <span className="text-red-400 font-semibold">-1 point</span> à leurs dimensions respectives (Styles, Langues, Rythmes, Époques).
+        </p>
+
+        {tasteScores ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-2">
+            {/* Genres */}
+            <div className="bg-black/20 p-4 rounded-xl border border-[#282828]">
+              <h4 className="text-xs font-black uppercase tracking-wider text-[#b3b3b3] mb-3">Styles Musicaux (Genres)</h4>
+              <div className="space-y-2.5">
+                {Object.entries(tasteScores.genres || {}).map(([g, val]: any) => (
+                  <div key={g} className="text-xs">
+                    <div className="flex justify-between mb-1">
+                      <span className="capitalize font-semibold text-neutral-200">{g === "lofi" ? "Lofi / Chill" : g}</span>
+                      <span className="font-mono text-[#1DB954]">{val} pts</span>
+                    </div>
+                    <div className="w-full bg-[#282828] h-1.5 rounded-full overflow-hidden">
+                      <div className="bg-[#1DB954] h-full transition-all duration-500" style={{ width: `${Math.min(100, (val / 30) * 100)}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Languages */}
+            <div className="bg-black/20 p-4 rounded-xl border border-[#282828]">
+              <h4 className="text-xs font-black uppercase tracking-wider text-[#b3b3b3] mb-3">Langues d'Écoute</h4>
+              <div className="space-y-2.5">
+                {Object.entries(tasteScores.languages || {}).map(([l, val]: any) => (
+                  <div key={l} className="text-xs">
+                    <div className="flex justify-between mb-1">
+                      <span className="font-semibold text-neutral-200">{l === "fr" ? "Français" : "Anglais / Autre"}</span>
+                      <span className="font-mono text-[#1DB954]">{val} pts</span>
+                    </div>
+                    <div className="w-full bg-[#282828] h-1.5 rounded-full overflow-hidden">
+                      <div className="bg-[#1DB954] h-full transition-all duration-500" style={{ width: `${Math.min(100, (val / 30) * 100)}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Rhythms */}
+            <div className="bg-black/20 p-4 rounded-xl border border-[#282828]">
+              <h4 className="text-xs font-black uppercase tracking-wider text-[#b3b3b3] mb-3">Rythmes & Tempo</h4>
+              <div className="space-y-2.5">
+                {Object.entries(tasteScores.rhythms || {}).map(([r, val]: any) => (
+                  <div key={r} className="text-xs">
+                    <div className="flex justify-between mb-1">
+                      <span className="capitalize font-semibold text-neutral-200">
+                        {r === "fast" ? "Rapide / Dance" : r === "medium" ? "Modéré" : "Lent / Ambiant"}
+                      </span>
+                      <span className="font-mono text-[#1DB954]">{val} pts</span>
+                    </div>
+                    <div className="w-full bg-[#282828] h-1.5 rounded-full overflow-hidden">
+                      <div className="bg-[#1DB954] h-full transition-all duration-500" style={{ width: `${Math.min(100, (val / 30) * 100)}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Eras */}
+            <div className="bg-black/20 p-4 rounded-xl border border-[#282828]">
+              <h4 className="text-xs font-black uppercase tracking-wider text-[#b3b3b3] mb-3">Époques de Sortie</h4>
+              <div className="space-y-2.5">
+                {Object.entries(tasteScores.eras || {}).map(([e, val]: any) => (
+                  <div key={e} className="text-xs">
+                    <div className="flex justify-between mb-1">
+                      <span className="font-semibold text-neutral-200">
+                        {e === "2020s" ? "Actuel (2020s)" : e === "2010s" ? "Années 2010" : e === "2000s" ? "Années 2000" : "Classiques / Oldies"}
+                      </span>
+                      <span className="font-mono text-[#1DB954]">{val} pts</span>
+                    </div>
+                    <div className="w-full bg-[#282828] h-1.5 rounded-full overflow-hidden">
+                      <div className="bg-[#1DB954] h-full transition-all duration-500" style={{ width: `${Math.min(100, (val / 30) * 100)}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-6 text-neutral-500 text-xs">
+            Aucun score d'affinité calculé pour l'instant. Commencez à écouter de la musique pour construire votre profil !
           </div>
         )}
       </div>

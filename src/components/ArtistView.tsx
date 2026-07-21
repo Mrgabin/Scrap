@@ -260,6 +260,18 @@ export default function ArtistView({
 
         const finalTracks = fetchedTracks.length > 0 ? fetchedTracks : (cached?.topTracks || localTracks);
 
+        // Update local storage so that other views immediately get the real official photo
+        if (finalProfile && finalProfile.avatarUrl) {
+          try {
+            const saved = localStorage.getItem("spotify_artist_avatars") || "{}";
+            const parsed = JSON.parse(saved);
+            parsed[artistName] = finalProfile.avatarUrl;
+            localStorage.setItem("spotify_artist_avatars", JSON.stringify(parsed));
+          } catch (e) {
+            console.warn("Failed to cache avatar in localStorage inside ArtistView:", e);
+          }
+        }
+
         // Update the client-side cache
         artistCache[cacheKey] = {
           profileData: finalProfile,

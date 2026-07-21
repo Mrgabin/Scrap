@@ -528,9 +528,13 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
 
         if (channels.length > 0) {
           // Find the best match, or default to the first one
-          const match = channels.find((c: any) => 
-            (c.title?.simpleText || "").toLowerCase().trim() === artistName.toLowerCase().trim()
-          ) || channels[0];
+          const match = channels.find((c: any) => {
+            const title = (c.title?.simpleText || c.title?.runs?.[0]?.text || "").toLowerCase().trim();
+            return title === artistName.toLowerCase().trim();
+          }) || channels.find((c: any) => {
+            const title = (c.title?.simpleText || c.title?.runs?.[0]?.text || "").toLowerCase().trim();
+            return title.includes(artistName.toLowerCase().trim()) || artistName.toLowerCase().trim().includes(title);
+          }) || channels[0];
 
           if (match) {
             channelId = match.channelId || "";
@@ -560,9 +564,14 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
           findVideos(data);
 
           if (videos.length > 0) {
-            const firstVideo = videos[0];
-            channelId = firstVideo.ownerText?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId || firstVideo.channelThumbnailSupportedRenderers?.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.browseId || "";
-            const videoChannelThumbs = firstVideo.channelThumbnailSupportedRenderers?.channelThumbnailWithLinkRenderer?.thumbnail?.thumbnails;
+            // Try to find a video owned by the artist first
+            const matchedVideo = videos.find((v: any) => {
+              const ownerName = (v.ownerText?.runs?.[0]?.text || "").toLowerCase().trim();
+              return ownerName === artistName.toLowerCase().trim() || ownerName.includes(artistName.toLowerCase().trim()) || artistName.toLowerCase().trim().includes(ownerName);
+            }) || videos[0];
+
+            channelId = matchedVideo.ownerText?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId || matchedVideo.channelThumbnailSupportedRenderers?.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.browseId || "";
+            const videoChannelThumbs = matchedVideo.channelThumbnailSupportedRenderers?.channelThumbnailWithLinkRenderer?.thumbnail?.thumbnails;
             if (videoChannelThumbs && videoChannelThumbs.length > 0) {
               const sorted = videoChannelThumbs.sort((a: any, b: any) => (b.width || 0) - (a.width || 0));
               ytAvatar = sorted[0]?.url || "";

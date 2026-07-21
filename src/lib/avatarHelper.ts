@@ -1,5 +1,60 @@
 export const DETERMINISTIC_AVATARS: string[] = [];
 
+export async function fetchArtistAvatarClient(artistName: string): Promise<string | null> {
+  const normalized = (artistName || "").trim();
+  if (!normalized) return null;
+
+  try {
+    // 1. Try French Wikipedia first (great for local French artists like Damso, Luther, Specy Men)
+    const frUrl = `https://fr.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(normalized)}&gsrlimit=1&prop=pageimages&piprop=original&format=json&origin=*`;
+    const frRes = await fetch(frUrl);
+    if (frRes.ok) {
+      const data = await frRes.json();
+      const pages = data?.query?.pages;
+      if (pages) {
+        const pageId = Object.keys(pages)[0];
+        const originalImg = pages[pageId]?.original?.source;
+        if (originalImg) {
+          return originalImg;
+        }
+      }
+    }
+
+    // 2. Try English Wikipedia (great for international artists like Michael Jackson, The Weeknd)
+    const enUrl = `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(normalized)}&gsrlimit=1&prop=pageimages&piprop=original&format=json&origin=*`;
+    const enRes = await fetch(enUrl);
+    if (enRes.ok) {
+      const data = await enRes.json();
+      const pages = data?.query?.pages;
+      if (pages) {
+        const pageId = Object.keys(pages)[0];
+        const originalImg = pages[pageId]?.original?.source;
+        if (originalImg) {
+          return originalImg;
+        }
+      }
+    }
+
+    // 3. Try iTunes Search API as a high-quality official music fallback (album artwork)
+    const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(normalized)}&entity=album&limit=1`;
+    const itunesRes = await fetch(itunesUrl);
+    if (itunesRes.ok) {
+      const data = await itunesRes.json();
+      if (data.results && data.results.length > 0) {
+        const artwork = data.results[0].artworkUrl100;
+        if (artwork) {
+          // Upgrade to high-resolution
+          return artwork.replace("100x100bb.jpg", "600x600bb.jpg");
+        }
+      }
+    }
+  } catch (error) {
+    console.warn("Error in client-side artist photo fetch:", error);
+  }
+
+  return null;
+}
+
 export function getDeterministicArtistAvatar(artistName: string): string {
   const normalized = (artistName || "").toLowerCase().trim();
   

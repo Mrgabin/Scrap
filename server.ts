@@ -486,30 +486,109 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
   let bio = hasKnown?.bio || "";
   let channelId = "";
 
-  // 1. Try to fetch the official artist profile image from Deezer API first
+  // 1. Try to fetch from Wikipedia first (since it has high-quality public domain portraits of artists)
   try {
-    const deezerResponse = await fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(artistName)}`, {
+    const wikiUrl = `https://fr.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(artistName)}&gsrlimit=1&prop=pageimages&piprop=original&format=json&origin=*`;
+    const wikiResponse = await fetch(wikiUrl, {
       signal: AbortSignal.timeout(2000),
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "ScrapUp/1.0 (ytgabgal@gmail.com) Node/fetch"
       }
     });
-    const deezerData = await deezerResponse.json();
-    if (deezerData && deezerData.data && deezerData.data.length > 0) {
-      // Find the best matching artist name or default to first
-      const match = deezerData.data.find(
-        (a: any) => a.name.toLowerCase().trim() === artistName.toLowerCase().trim()
-      ) || deezerData.data[0];
-      
-      if (match) {
-        avatarUrl = match.picture_xl || match.picture_big || match.picture_medium || match.picture || "";
-        if (avatarUrl) {
-          console.log(`[Deezer API] Found official avatarUrl for ${artistName}: ${avatarUrl}`);
+    if (wikiResponse.ok) {
+      const wikiData = await wikiResponse.json();
+      const pages = wikiData?.query?.pages;
+      if (pages) {
+        const pageId = Object.keys(pages)[0];
+        const originalImg = pages[pageId]?.original?.source;
+        if (originalImg) {
+          avatarUrl = originalImg;
+          console.log(`[Wikipedia API fr] Found official avatarUrl for ${artistName}: ${avatarUrl}`);
         }
       }
     }
-  } catch (deezerError) {
-    console.log(`[Deezer API info] Could not fetch artist profile for ${artistName}:`, deezerError?.message || deezerError);
+  } catch (err: any) {
+    console.log(`[Wikipedia API fr info] Could not fetch artist profile for ${artistName}:`, err?.message || err);
+  }
+
+  // If French Wikipedia didn't have it, try English Wikipedia
+  if (!avatarUrl) {
+    try {
+      const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(artistName)}&gsrlimit=1&prop=pageimages&piprop=original&format=json&origin=*`;
+      const wikiResponse = await fetch(wikiUrl, {
+        signal: AbortSignal.timeout(2000),
+        headers: {
+          "User-Agent": "ScrapUp/1.0 (ytgabgal@gmail.com) Node/fetch"
+        }
+      });
+      if (wikiResponse.ok) {
+        const wikiData = await wikiResponse.json();
+        const pages = wikiData?.query?.pages;
+        if (pages) {
+          const pageId = Object.keys(pages)[0];
+          const originalImg = pages[pageId]?.original?.source;
+          if (originalImg) {
+            avatarUrl = originalImg;
+            console.log(`[Wikipedia API en] Found official avatarUrl for ${artistName}: ${avatarUrl}`);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.log(`[Wikipedia API en info] Could not fetch artist profile for ${artistName}:`, err?.message || err);
+    }
+  }
+
+  // 2. Try to fetch the official artist profile image from Deezer API if Wikipedia returned nothing
+  if (!avatarUrl) {
+    try {
+      const deezerResponse = await fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(artistName)}`, {
+        signal: AbortSignal.timeout(2000),
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+      });
+      const deezerData = await deezerResponse.json();
+      if (deezerData && deezerData.data && deezerData.data.length > 0) {
+        // Find the best matching artist name or default to first
+        const match = deezerData.data.find(
+          (a: any) => a.name.toLowerCase().trim() === artistName.toLowerCase().trim()
+        ) || deezerData.data[0];
+        
+        if (match) {
+          avatarUrl = match.picture_xl || match.picture_big || match.picture_medium || match.picture || "";
+          if (avatarUrl) {
+            console.log(`[Deezer API] Found official avatarUrl for ${artistName}: ${avatarUrl}`);
+          }
+        }
+      }
+    } catch (deezerError: any) {
+      console.log(`[Deezer API info] Could not fetch artist profile for ${artistName}:`, deezerError?.message || deezerError);
+    }
+  }
+
+  // 3. Try to fetch from iTunes Search API as a high-quality music metadata fallback if still no avatar
+  if (!avatarUrl) {
+    try {
+      const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&entity=album&limit=1`;
+      const itunesResponse = await fetch(itunesUrl, {
+        signal: AbortSignal.timeout(2000),
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+      });
+      if (itunesResponse.ok) {
+        const itunesData = await itunesResponse.json();
+        if (itunesData.results && itunesData.results.length > 0) {
+          const artwork = itunesData.results[0].artworkUrl100;
+          if (artwork) {
+            avatarUrl = artwork.replace("100x100bb.jpg", "600x600bb.jpg");
+            console.log(`[iTunes API] Found official release artwork for ${artistName}: ${avatarUrl}`);
+          }
+        }
+      }
+    } catch (itunesError: any) {
+      console.log(`[iTunes API info] Could not fetch artist profile for ${artistName}:`, itunesError?.message || itunesError);
+    }
   }
 
   // Perform a YouTube channel search for the artist to scrape real avatar and channel details

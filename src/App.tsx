@@ -37,7 +37,7 @@ import StableSingularityBackground from "./components/StableSingularityBackgroun
 import TectonicLavaBackground from "./components/TectonicLavaBackground";
 import QuantumCoreBackground from "./components/QuantumCoreBackground";
 import { useTranslation } from "./lib/LanguageContext";
-import { getDeterministicArtistAvatar } from "./lib/avatarHelper";
+import { getDeterministicArtistAvatar, fetchArtistAvatarClient } from "./lib/avatarHelper";
 import { analyzeTrackMetadata } from "./lib/profiler";
 
 import { 
@@ -684,21 +684,34 @@ export default function App() {
           const artistName = matchedTrack ? matchedTrack.artist : data.results[0].artist;
           
           if (artistName && !artistAvatars[artistName]) {
-            fetch(`/api/artist-profile?name=${encodeURIComponent(artistName)}`)
-              .then(res => {
-                if (res.ok) return res.json();
-                throw new Error("Failed to load profile");
-              })
-              .then(profile => {
-                if (profile && profile.avatarUrl) {
-                  setArtistAvatars(prev => {
-                    const next = { ...prev, [artistName]: profile.avatarUrl };
-                    localStorage.setItem("spotify_artist_avatars", JSON.stringify(next));
-                    return next;
-                  });
+            const getAvatar = async () => {
+              let url = null;
+              try {
+                const res = await fetch(`/api/artist-profile?name=${encodeURIComponent(artistName)}`);
+                if (res.ok) {
+                  const profile = await res.json();
+                  if (profile && profile.avatarUrl && !profile.avatarUrl.includes("unsplash.com")) {
+                    url = profile.avatarUrl;
+                  }
                 }
-              })
-              .catch(err => console.warn(`Could not background fetch artist profile for ${artistName}:`, err));
+              } catch (e) {
+                // Ignore backend failure (e.g. CORS on Vercel)
+              }
+
+              // Fall back to direct client-side Wikipedia / iTunes scraper if backend failed or returned placeholder
+              if (!url) {
+                url = await fetchArtistAvatarClient(artistName);
+              }
+
+              if (url) {
+                setArtistAvatars(prev => {
+                  const next = { ...prev, [artistName]: url };
+                  localStorage.setItem("spotify_artist_avatars", JSON.stringify(next));
+                  return next;
+                });
+              }
+            };
+            getAvatar();
           }
         }
       }
@@ -945,25 +958,33 @@ export default function App() {
         if (!active) break;
         if (!artistAvatars[artist]) {
           try {
-            const res = await fetch(`/api/artist-profile?name=${encodeURIComponent(artist)}`);
-            if (!res.ok) {
-              console.warn(`Failed to fetch artist profile for ${artist}: ${res.status} ${res.statusText}`);
-              await new Promise((resolve) => setTimeout(resolve, 1000));
-              continue;
-            }
-            const contentType = res.headers.get("content-type");
-            if (contentType && contentType.includes("application/json")) {
-              const data = await res.json();
-              if (data && data.avatarUrl && active) {
-                setArtistAvatars(prev => {
-                  const next = { ...prev, [artist]: data.avatarUrl };
-                  localStorage.setItem("spotify_artist_avatars", JSON.stringify(next));
-                  return next;
-                });
+            let avatarUrl = null;
+            try {
+              const res = await fetch(`/api/artist-profile?name=${encodeURIComponent(artist)}`);
+              if (res.ok) {
+                const contentType = res.headers.get("content-type");
+                if (contentType && contentType.includes("application/json")) {
+                  const data = await res.json();
+                  if (data && data.avatarUrl && !data.avatarUrl.includes("unsplash.com")) {
+                    avatarUrl = data.avatarUrl;
+                  }
+                }
               }
-            } else {
-              const text = await res.text();
-              console.warn(`Expected JSON for ${artist}, got: ${text}`);
+            } catch (e) {
+              // Ignore backend errors (CORS on Vercel)
+            }
+
+            // Direct client-side Wikipedia/iTunes fallback
+            if (!avatarUrl && active) {
+              avatarUrl = await fetchArtistAvatarClient(artist);
+            }
+
+            if (avatarUrl && active) {
+              setArtistAvatars(prev => {
+                const next = { ...prev, [artist]: avatarUrl };
+                localStorage.setItem("spotify_artist_avatars", JSON.stringify(next));
+                return next;
+              });
             }
             await new Promise((resolve) => setTimeout(resolve, 300));
           } catch (err) {

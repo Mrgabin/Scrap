@@ -3,7 +3,7 @@ import { Play, Pause, Disc, Heart, Check, Clock, ShieldCheck, Sparkles } from "l
 import { Track } from "../types";
 import { CURATED_PLAYLISTS } from "../data/curatedPlaylists";
 import { useTranslation } from "../lib/LanguageContext";
-import { getDeterministicArtistAvatar, getDeterministicArtistBanner } from "../lib/avatarHelper";
+import { getDeterministicArtistAvatar, getDeterministicArtistBanner, fetchArtistAvatarClient } from "../lib/avatarHelper";
 
 interface ArtistViewProps {
   artistName: string;
@@ -246,10 +246,18 @@ export default function ArtistView({
       }
 
       if (active) {
-        const finalProfile = fetchedProfile || cached?.profileData || initialProfile;
-        if (finalProfile && !finalProfile.avatarUrl) {
-          finalProfile.avatarUrl = getDeterministicArtistAvatar(artistName);
+        const finalProfile = fetchedProfile ? { ...fetchedProfile } : (cached?.profileData ? { ...cached.profileData } : { ...initialProfile });
+        
+        // If finalProfile has no avatarUrl or it's an Unsplash placeholder, fetch the official one on client-side
+        if (finalProfile && (!finalProfile.avatarUrl || finalProfile.avatarUrl.includes("unsplash.com"))) {
+          const clientImg = await fetchArtistAvatarClient(artistName);
+          if (clientImg) {
+            finalProfile.avatarUrl = clientImg;
+          } else if (!finalProfile.avatarUrl) {
+            finalProfile.avatarUrl = getDeterministicArtistAvatar(artistName);
+          }
         }
+
         const finalTracks = fetchedTracks.length > 0 ? fetchedTracks : (cached?.topTracks || localTracks);
 
         // Update the client-side cache

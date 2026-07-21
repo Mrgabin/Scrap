@@ -22,10 +22,7 @@ Les navigateurs web modernes (Google Chrome, Apple Safari, Mozilla Firefox) appl
 * **La Solution** : **Il vous suffit de cliquer ou tapoter directement une fois sur le petit encadré vidéo du lecteur** (l'icône ou le cadre vidéo flottant YouTube situé en bas à droite de l'écran).
 * **Pourquoi ?** : En cliquant directement dans cet espace (le cadre de l'iframe YouTube), vous donnez l'autorisation légale au navigateur web de décoder et diffuser le flux sonore. Dès que cette action est faite une fois au début de votre session, toutes les musiques suivantes se lanceront automatiquement au simple clic sur Play !
 
-<div align="center">
-  <img src="https://images.unsplash.com/photo-1614149162883-504ce4d13909?w=800&auto=format&fit=crop&q=80" alt="Browser Interactivity Policy" width="70%" style="border-radius: 12px; border: 1px solid #333; margin: 15px 0;" />
-  <p><i>Légende : Une simple interaction sur le bloc vidéo débloque la lecture continue de tout le catalogue.</i></p>
-</div>
+
 
 ### 🛡️ 2. L'environnement d'Aperçu (Iframe Sandbox)
 Si vous utilisez BeatStream à l'intérieur de l'aperçu d'un éditeur ou d'une iframe (comme l'aperçu par défaut d'AI Studio), certaines permissions globales ou fonctionnalités clavier (touches multimédias) peuvent être restreintes par la sécurité du navigateur. 

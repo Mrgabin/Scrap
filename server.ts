@@ -157,8 +157,8 @@ async function searchYouTube(query: string, limit = 15): Promise<any[]> {
     let lastError: any = null;
 
     const isVercel = !!process.env.VERCEL;
-    const timeoutDuration = isVercel ? 1500 : 2500;
-    const maxAttempts = isVercel ? 1 : 2;
+    const timeoutDuration = isVercel ? 3000 : 2500;
+    const maxAttempts = isVercel ? 2 : 2;
 
     // Retry up to maxAttempts times
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -461,7 +461,7 @@ async function resolveArtistAvatarServer(artistName: string): Promise<string> {
   // 1. Try Deezer Search Artist API (super reliable, official high-res headshot!)
   try {
     const deezerResponse = await fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(artistName)}`, {
-      signal: AbortSignal.timeout(isVercel ? 1000 : 2500),
+      signal: AbortSignal.timeout(isVercel ? 2500 : 2500),
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
       }
@@ -493,7 +493,7 @@ async function resolveArtistAvatarServer(artistName: string): Promise<string> {
   try {
     const ytMusicUrl = `https://music.youtube.com/search?q=${encodeURIComponent(artistName)}`;
     const response = await fetch(ytMusicUrl, {
-      signal: AbortSignal.timeout(isVercel ? 1200 : 3000),
+      signal: AbortSignal.timeout(isVercel ? 3000 : 3000),
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -540,7 +540,7 @@ async function resolveArtistAvatarServer(artistName: string): Promise<string> {
   try {
     const wikiUrl = `https://fr.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(artistName)}&gsrlimit=1&prop=pageimages&piprop=original&format=json&origin=*`;
     const wikiRes = await fetch(wikiUrl, {
-      signal: AbortSignal.timeout(isVercel ? 800 : 1500),
+      signal: AbortSignal.timeout(isVercel ? 2000 : 1500),
       headers: { "User-Agent": "ScrapUp/1.0 (ytgabgal@gmail.com) Node/fetch" }
     });
     if (wikiRes.ok) {
@@ -563,7 +563,7 @@ async function resolveArtistAvatarServer(artistName: string): Promise<string> {
   try {
     const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(artistName)}&gsrlimit=1&prop=pageimages&piprop=original&format=json&origin=*`;
     const wikiRes = await fetch(wikiUrl, {
-      signal: AbortSignal.timeout(isVercel ? 800 : 1500),
+      signal: AbortSignal.timeout(isVercel ? 2000 : 1500),
       headers: { "User-Agent": "ScrapUp/1.0 (ytgabgal@gmail.com) Node/fetch" }
     });
     if (wikiRes.ok) {
@@ -671,7 +671,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
     const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(artistName)}`;
     try {
       const response = await fetch(searchUrl, {
-        signal: AbortSignal.timeout(isVercel ? 1200 : 3000),
+        signal: AbortSignal.timeout(isVercel ? 3000 : 3000),
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -765,7 +765,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
       const filterUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(artistName)}&sp=EgIQAg%253D%253D`;
       try {
         const response = await fetch(filterUrl, {
-          signal: AbortSignal.timeout(isVercel ? 1000 : 3000),
+          signal: AbortSignal.timeout(isVercel ? 2500 : 3000),
           headers: {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -821,18 +821,19 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
       try {
         const channelPageUrl = `https://www.youtube.com/channel/${channelId}`;
         const chanResponse = await fetch(channelPageUrl, {
-          signal: AbortSignal.timeout(isVercel ? 1000 : 3000),
+          signal: AbortSignal.timeout(1800),
           headers: {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Cache-Control": "no-cache"
+            "Cache-Control": "no-cache",
+            "Cookie": "SOCS=CAESEwgDEgk0ODE3Nzk3NTQaAmZyIAEaBgiA_K6ZBg; CONSENT=YES+cb.20210328-17-p0.en+FX+917"
           }
         });
         if (chanResponse.ok) {
           chanHtml = await chanResponse.text();
         }
       } catch (e) {
-        console.log(`[YT Channel Page] Fetch failed or timed out for "${artistName}" channel ${channelId}`);
+        // Channel page fetch timed out or was blocked by YT anti-bot; handle silently
       }
 
       if (chanHtml) {
@@ -863,7 +864,6 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
               if (avatarThumbnails && avatarThumbnails.length > 0) {
                 const sortedAvatars = avatarThumbnails.sort((a: any, b: any) => (b.width || 0) - (a.width || 0));
                 ytAvatar = sortedAvatars[0]?.url || ytAvatar;
-                console.log(`[YT Channel Page] Found high-res avatar in c4TabbedHeaderRenderer: ${ytAvatar}`);
               }
             } else if (header.pageHeaderRenderer) {
               const phr = header.pageHeaderRenderer;
@@ -871,7 +871,6 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
               if (avatarVM && avatarVM.sources && avatarVM.sources.length > 0) {
                 const sortedAvatars = avatarVM.sources.sort((a: any, b: any) => (b.width || 0) - (a.width || 0));
                 ytAvatar = sortedAvatars[0]?.url || ytAvatar;
-                console.log(`[YT Channel Page] Found high-res avatar in pageHeaderRenderer: ${ytAvatar}`);
               }
             }
           }
@@ -879,7 +878,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
       }
     }
   } catch (err) {
-    console.warn(`[YT Scraper Error] Failed to scrape YouTube profile details for ${artistName}:`, err);
+    // Handled silently
   }
 
   // Upgrade to ultra high-resolution
@@ -889,12 +888,31 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
     avatarUrl = ytAvatar.replace(/=s\d+-[^]+$/, "=s512-c-k-c0x00ffffff-no-rj")
                         .replace(/\/s\d+-c/, "/s512-c")
                         .replace(/=s\d+/, "=s512");
-    console.log(`[YT Scraper Success] Official YouTube profile photo found & upgraded for ${artistName}: ${avatarUrl}`);
   }
 
   // --- 2. FALLBACKS (ONLY IF YOUTUBE SCRAPER RETURNED NOTHING) ---
   if (!avatarUrl) {
     avatarUrl = await resolveArtistAvatarServer(artistName);
+  }
+
+  // Fallback for bannerUrl if YouTube channel did not provide one
+  if (!bannerUrl) {
+    try {
+      const deezerRes = await fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(artistName)}`, {
+        signal: AbortSignal.timeout(1800)
+      });
+      if (deezerRes.ok) {
+        const deezerData = await deezerRes.json();
+        if (deezerData?.data?.[0]?.picture_xl) {
+          bannerUrl = deezerData.data[0].picture_xl;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  if (!bannerUrl) {
+    bannerUrl = avatarUrl;
   }
 
   // Ensure full protocol URL

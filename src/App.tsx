@@ -58,7 +58,8 @@ import {
   Inbox,
   Compass,
   X,
-  Library
+  Library,
+  Info
 } from "lucide-react";
 
 const PRE_POPULATED_HISTORY = [
@@ -226,7 +227,9 @@ export default function App() {
   }, [user?.uid, user?.isGuest]);
 
   const [isSearchHistoryOpen, setIsSearchHistoryOpen] = useState(false);
+  const [showSearchInfo, setShowSearchInfo] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const silentAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Password Security & Verification States
   const [isPasswordVerified, setIsPasswordVerified] = useState<boolean>(false);
@@ -1297,11 +1300,12 @@ export default function App() {
     };
   }, [currentTrack?.id]);
 
-  // Click outside search container listener to close history dropdown
+  // Click outside search container listener to close history dropdown and search info
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
         setIsSearchHistoryOpen(false);
+        setShowSearchInfo(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -1693,6 +1697,12 @@ export default function App() {
       navigator.mediaSession.setActionHandler("previoustrack", () => {
         handlePrevTrackRef.current();
       });
+      navigator.mediaSession.setActionHandler("seekto", (details) => {
+        if (details.seekTime !== undefined) {
+          setSeekTo(details.seekTime);
+          setCurrentTime(details.seekTime);
+        }
+      });
     } catch (error) {
       console.warn("Error setting MediaSession action handlers:", error);
     }
@@ -1704,10 +1714,47 @@ export default function App() {
           navigator.mediaSession.setActionHandler("pause", null);
           navigator.mediaSession.setActionHandler("nexttrack", null);
           navigator.mediaSession.setActionHandler("previoustrack", null);
+          navigator.mediaSession.setActionHandler("seekto", null);
         } catch (e) {}
       }
     };
   }, []);
+
+  // Update lock screen timeline slider progress state in real time
+  useEffect(() => {
+    if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
+    if (currentTrack && duration > 0 && currentTime >= 0) {
+      try {
+        navigator.mediaSession.setPositionState({
+          duration: duration,
+          playbackRate: 1.0,
+          position: Math.min(currentTime, duration),
+        });
+      } catch (e) {
+        // Some older browsers might throw if duration/position are out of sync or negative
+      }
+    }
+  }, [currentTime, duration, currentTrack]);
+
+  // Silent audio loop to prevent browser throttling/sleep of background tabs on mobile devices when screen locks
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if (isPlaying && currentTrack) {
+      if (!silentAudioRef.current) {
+        // Simple 1-second silent WAV format looping audio
+        silentAudioRef.current = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==");
+        silentAudioRef.current.loop = true;
+      }
+      silentAudioRef.current.play().catch(err => {
+        console.log("Background audio silent keeper active:", err);
+      });
+    } else {
+      if (silentAudioRef.current) {
+        silentAudioRef.current.pause();
+      }
+    }
+  }, [isPlaying, currentTrack]);
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -2535,9 +2582,11 @@ export default function App() {
                       setCurrentView("search");
                     }
                     setIsSearchHistoryOpen(true);
+                    setShowSearchInfo(false);
                   }}
                   onClick={() => {
                     setIsSearchHistoryOpen(true);
+                    setShowSearchInfo(false);
                   }}
                   className="w-full bg-transparent text-sm text-white placeholder-neutral-400 outline-none"
                 />
@@ -2557,6 +2606,22 @@ export default function App() {
                       <X className="w-4 h-4" />
                     </button>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowSearchInfo(!showSearchInfo);
+                      setIsSearchHistoryOpen(false);
+                    }}
+                    title="Aide à la recherche"
+                    className={`p-1 hover:bg-[#323232] rounded-full transition-colors shrink-0 ${
+                      showSearchInfo ? "text-[#1DB954] bg-[#323232]" : "text-[#b3b3b3] hover:text-white"
+                    }`}
+                  >
+                    <Info className="w-4 h-4" />
+                  </button>
+
                   <div className="h-4 w-[1px] bg-neutral-600/80 mx-0.5"></div>
                   <button
                     type="button"
@@ -2574,6 +2639,60 @@ export default function App() {
                     <Library className="w-4 h-4" />
                   </button>
                 </div>
+
+                {/* SEARCH HELP / INFO POPOVER */}
+                {showSearchInfo && (
+                  <div 
+                    id="search_info_popover"
+                    className="absolute top-full left-0 right-0 mt-2 z-50 bg-[#12121e] border border-[#1DB954]/30 rounded-2xl shadow-2xl p-4 text-left animate-in fade-in duration-200"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-full bg-[#1DB954]/10 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954] shrink-0">
+                        <Info className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-xs font-black text-[#1DB954] uppercase tracking-wider mb-1">Aide à la recherche</h4>
+                        <p className="text-xs text-neutral-300 leading-relaxed">
+                          Si vous ne trouvez pas un artiste ou un titre, vous devez saisir le nom de l'artiste ou le titre suivi de la <strong>langue</strong> de l'artiste ou du titre.
+                        </p>
+                        <div className="mt-2.5 bg-white/5 border border-white/10 rounded-xl p-2 flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className="text-[10px] text-neutral-400 block uppercase font-mono tracking-wider">Exemple :</span>
+                            <span className="text-xs font-medium text-white truncate block">"Elton John Anglais"</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSearchQuery("Elton John Anglais");
+                              if (currentView !== "search") {
+                                setCurrentView("search");
+                              }
+                              executeSearch("Elton John Anglais");
+                              setShowSearchInfo(false);
+                            }}
+                            className="text-[10px] bg-[#1DB954] hover:bg-[#1ed760] text-black font-extrabold px-2.5 py-1 rounded-full transition-all shrink-0 active:scale-95"
+                          >
+                            Essayer
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-3.5 pt-2.5 border-t border-white/5 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowSearchInfo(false);
+                        }}
+                        className="text-[10px] text-neutral-400 hover:text-white font-bold uppercase tracking-wider transition-colors"
+                      >
+                        Fermer
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* SEARCH HISTORY DROPDOWN PANEL */}
                 {isSearchHistoryOpen && (
@@ -2673,7 +2792,7 @@ export default function App() {
                     setCurrentView("settings");
                   }
                 }}
-                className="flex items-center gap-2 bg-black/40 hover:bg-black/60 rounded-full p-1 pr-3 cursor-pointer transition-colors border border-transparent hover:border-neutral-800"
+                className="flex items-center gap-2 bg-black/40 hover:bg-black/60 rounded-full p-1 md:pr-3 cursor-pointer transition-colors border border-transparent hover:border-neutral-800"
               >
                 <div className="w-7 h-7 rounded-full overflow-hidden shrink-0 bg-neutral-800">
                   {user.photoURL ? (
@@ -2694,7 +2813,7 @@ export default function App() {
                     </div>
                   )}
                 </div>
-                <span className="text-xs font-bold text-white truncate max-w-[100px]">
+                <span className="hidden md:inline text-xs font-bold text-white truncate max-w-[100px]">
                   {user.displayName || "Profil"}
                 </span>
               </div>
@@ -2722,6 +2841,8 @@ export default function App() {
                 onRegenerateMixes={handleRegenerateMixes}
                 loadingPersonalized={loadingPersonalized}
                 recommendationTimestamp={recommendationTimestamp}
+                user={user}
+                onSelectView={setCurrentView}
               />
             )}
 
@@ -2893,6 +3014,7 @@ export default function App() {
         currentView={currentView}
         setCurrentView={setCurrentView}
         hasCurrentTrack={!!currentTrack}
+        onCreatePlaylist={() => setIsModalOpen(true)}
       />
 
       {/* Create Custom Playlist Interactive Overlay Modal */}

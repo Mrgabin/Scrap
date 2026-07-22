@@ -1,5 +1,5 @@
 import React from "react";
-import { Play, Sparkles, RefreshCw, Disc, Music } from "lucide-react";
+import { Play, Sparkles, RefreshCw, Disc, Music, Heart } from "lucide-react";
 import { Track, Playlist } from "../types";
 import { CURATED_PLAYLISTS } from "../data/curatedPlaylists";
 import PlaylistCover from "./PlaylistCover";
@@ -23,6 +23,8 @@ interface HomeViewProps {
   onRegenerateMixes?: () => void;
   loadingPersonalized?: boolean;
   recommendationTimestamp?: number;
+  user?: any;
+  onSelectView?: (view: string) => void;
 }
 
 export default function HomeView({
@@ -42,8 +44,13 @@ export default function HomeView({
   onOpenTasteSurvey = () => {},
   onRegenerateMixes = () => {},
   loadingPersonalized = false,
-  recommendationTimestamp = 0
+  recommendationTimestamp = 0,
+  user = null,
+  onSelectView
 }: HomeViewProps) {
+
+  // Active Filter state for mobile tab chips ("Tout", "Musique", etc.)
+  const [activeFilter, setActiveFilter] = React.useState<string>("Tout");
 
   // Calculate remaining time for the 30-min auto-refresh
   const [timeLeftStr, setTimeLeftStr] = React.useState<string>("");
@@ -82,94 +89,205 @@ export default function HomeView({
     return "Bonsoir";
   };
 
+  // Build 8 elements for the top quick-access grid
+  const quickGridItems: any[] = [];
+  
+  // 1. Liked Songs tile (always first)
+  quickGridItems.push({
+    id: "liked-songs",
+    title: "Titres likés",
+    type: "liked",
+    thumbnail: "gradient",
+  });
+  
+  // 2. AI DJ tile
+  quickGridItems.push({
+    id: "ai-dj",
+    title: "DJ",
+    type: "dj",
+    thumbnail: "dj-gradient",
+  });
+
+  // 3. Discovery Weekly Quick Card
+  quickGridItems.push({
+    id: "discovery-weekly",
+    title: "Découvertes de la Semaine",
+    type: "discovery",
+    thumbnail: "discovery-gradient"
+  });
+
+  // Recent tracks
+  recentTracks.slice(0, 4).forEach((track, index) => {
+    if (quickGridItems.length < 8) {
+      quickGridItems.push({
+        id: `recent-${track.id}-${index}`,
+        title: track.title,
+        artist: track.artist,
+        thumbnail: track.thumbnail,
+        type: "track",
+        track: track,
+      });
+    }
+  });
+
+  // If still have space, add followed artists
+  followedArtists.slice(0, 4).forEach((artist, index) => {
+    if (quickGridItems.length < 8) {
+      quickGridItems.push({
+        id: `artist-${artist}-${index}`,
+        title: artist,
+        thumbnail: (artistAvatars && artistAvatars[artist]) || getDeterministicArtistAvatar(artist),
+        type: "artist",
+        artistName: artist,
+      });
+    }
+  });
+
+  // Fallback items to get exactly 8
+  const fallbacks = [
+    { id: "fallback-luther", title: "Luther", type: "artist", artistName: "Luther", thumbnail: getDeterministicArtistAvatar("Luther") },
+    { id: "fallback-eminem", title: "Eminem", type: "artist", artistName: "Eminem", thumbnail: getDeterministicArtistAvatar("Eminem") },
+    { id: "fallback-damso", title: "Damso", type: "artist", artistName: "Damso", thumbnail: getDeterministicArtistAvatar("Damso") },
+    { id: "fallback-elton", title: "Elton John", type: "artist", artistName: "Elton John", thumbnail: getDeterministicArtistAvatar("Elton John") },
+    { id: "fallback-speed", title: "IShowSpeed", type: "artist", artistName: "IShowSpeed", thumbnail: getDeterministicArtistAvatar("IShowSpeed") },
+    { id: "fallback-sad", title: "Sad songs for tik tok edits", type: "playlist-sad", thumbnail: "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=150" }
+  ];
+
+  while (quickGridItems.length < 8 && fallbacks.length > 0) {
+    const fb = fallbacks.shift();
+    if (fb && !quickGridItems.some(item => item.title === fb.title)) {
+      quickGridItems.push(fb);
+    }
+  }
+
+  const finalQuickGrid = quickGridItems.slice(0, 8);
+
+  const handleQuickGridClick = (item: any) => {
+    if (item.type === "liked") {
+      onSelectView?.("liked-songs");
+    } else if (item.type === "dj") {
+      if (recommendations.length > 0) {
+        onPlayTrack(recommendations[0], recommendations);
+      } else if (recentTracks.length > 0) {
+        onPlayTrack(recentTracks[0], recentTracks);
+      } else if (homeFeedData?.trending?.tracks?.length > 0) {
+        onPlayTrack(homeFeedData.trending.tracks[0], homeFeedData.trending.tracks);
+      }
+    } else if (item.type === "discovery") {
+      if (recommendations.length > 0) {
+        onPlayTrack(recommendations[0], recommendations);
+      }
+    } else if (item.type === "track" && item.track) {
+      onPlayTrack(item.track, recentTracks);
+    } else if (item.type === "artist" && item.artistName) {
+      onSelectArtist(item.artistName);
+    } else if (item.type === "playlist-sad") {
+      if (homeFeedData?.moods?.tracks?.length > 0) {
+        onPlayTrack(homeFeedData.moods.tracks[0], homeFeedData.moods.tracks);
+      }
+    }
+  };
+
   return (
     <div className="p-3 sm:p-6 pb-36 md:pb-28 overflow-y-auto h-full text-white" id="home_view">
       
-      {/* 1. Header Greeting & Quick Grid */}
-      <div className="mb-8">
-        <h2 className="text-3xl font-black mb-6 tracking-tight">{getGreeting()}</h2>
-        
-        {/* Quick Access Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="quick_grid">
-          {/* Discovery Weekly Quick Card */}
+      {/* 0. Mobile-only Header Row with avatar and filter chips */}
+      <div className="md:hidden flex items-center justify-between mb-4 select-none" id="mobile_header_row">
+        <div className="flex items-center gap-2 overflow-x-auto py-1 flex-1 pr-2 no-scrollbar scrollbar-none">
+          {/* User profile image */}
           <div 
-            onClick={() => {
-              if (recommendations.length > 0) {
-                onPlayTrack(recommendations[0], recommendations);
-              }
-            }}
-            className="bg-[#ffffff08] hover:bg-[#ffffff15] transition-all duration-300 rounded overflow-hidden flex items-center gap-4 cursor-pointer group border border-transparent hover:border-[#1DB954]/20"
+            onClick={() => onSelectView?.("settings")}
+            className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-[#2a2a2a] to-black shrink-0 cursor-pointer border border-white/10 flex items-center justify-center text-[11px] font-black uppercase text-[#1DB954] mr-1"
           >
-            <div className="w-20 h-20 bg-gradient-to-br from-indigo-800 to-emerald-500 shadow-xl shrink-0 flex items-center justify-center relative">
-              <Sparkles className="w-8 h-8 text-white absolute group-hover:scale-110 transition-transform" />
-            </div>
-            <div className="flex-1 min-w-0 pr-4 flex items-center justify-between">
-              <div>
-                <p className="font-bold text-sm text-white truncate">Découvertes de la Semaine</p>
-                <p className="text-xs text-[#b3b3b3]">Recommandations IA</p>
-              </div>
-              <button className="w-10 h-10 bg-[#1DB954] rounded-full flex items-center justify-center shadow-lg opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all">
-                <Play className="w-5 h-5 text-black fill-current translate-x-[1px]" />
-              </button>
-            </div>
+            {user?.photoURL ? (
+              <img referrerPolicy="no-referrer" src={user.photoURL} alt="Profil" className="w-full h-full object-cover" />
+            ) : (
+              (user?.displayName ? user.displayName.slice(0, 2) : "AC")
+            )}
           </div>
 
-          {/* Fallback Grid Items */}
-          {recentTracks.slice(0, 5).map((track, idx) => (
+          {/* Scrolling filter pills */}
+          <button 
+            onClick={() => setActiveFilter("Tout")}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+              activeFilter === "Tout" ? "bg-[#1DB954] text-black" : "bg-[#222] text-white hover:bg-[#333]"
+            }`}
+          >
+            Tout
+          </button>
+          <button 
+            onClick={() => setActiveFilter("Musique")}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+              activeFilter === "Musique" ? "bg-[#1DB954] text-black" : "bg-[#222] text-white hover:bg-[#333]"
+            }`}
+          >
+            Musique
+          </button>
+          <button 
+            onClick={() => setActiveFilter("Podcasts")}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+              activeFilter === "Podcasts" ? "bg-[#1DB954] text-black" : "bg-[#222] text-white hover:bg-[#333]"
+            }`}
+          >
+            Podcasts
+          </button>
+          <button 
+            onClick={() => setActiveFilter("Livres aud")}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+              activeFilter === "Livres aud" ? "bg-[#1DB954] text-black" : "bg-[#222] text-white hover:bg-[#333]"
+            }`}
+          >
+            Livres aud
+          </button>
+        </div>
+      </div>
+
+      {/* 1. Header Greeting & Quick Grid */}
+      <div className="mb-8">
+        <h2 className="text-2xl sm:text-3xl font-black mb-4 sm:mb-6 tracking-tight">{getGreeting()}</h2>
+        
+        {/* Quick Access Grid: 2 columns on mobile, 3-4 columns on desktop */}
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-4 font-sans" id="quick_grid">
+          {finalQuickGrid.map((item, index) => (
             <div 
-              key={`${track.id}-${idx}`}
-              onClick={() => onPlayTrack(track, recentTracks)}
-              className="bg-[#ffffff08] hover:bg-[#ffffff15] transition-all duration-300 rounded overflow-hidden flex items-center gap-4 cursor-pointer group border border-transparent hover:border-white/5"
+              key={item.id || `quick-grid-${index}`}
+              onClick={() => handleQuickGridClick(item)}
+              className="bg-white/[0.05] hover:bg-white/[0.1] transition-all duration-300 rounded overflow-hidden flex items-center gap-2 sm:gap-3 cursor-pointer group border border-transparent hover:border-white/5 h-12 sm:h-16"
             >
-              <img referrerPolicy="no-referrer" src={track.thumbnail} alt={track.title} className="w-20 h-20 object-cover shrink-0" />
-              <div className="flex-1 min-w-0 pr-4 flex items-center justify-between">
-                <div className="overflow-hidden">
-                  <p className="font-bold text-sm text-white truncate">{track.title}</p>
-                  <p className="text-xs text-[#b3b3b3] truncate">{track.artist}</p>
+              {/* Thumbnail rendering based on item type */}
+              {item.type === "liked" ? (
+                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-[#450e74] via-[#5b169c] to-[#71169c] shadow-lg shrink-0 flex items-center justify-center relative">
+                  <Heart className="w-5 h-5 sm:w-7 sm:h-7 text-white fill-current" />
                 </div>
-                <button className="w-10 h-10 bg-[#1DB954] rounded-full flex items-center justify-center shadow-lg opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all shrink-0">
-                  <Play className="w-5 h-5 text-black fill-current translate-x-[1px]" />
+              ) : item.type === "dj" ? (
+                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-[#0c2f6d] to-[#040f26] shadow-lg shrink-0 flex items-center justify-center relative overflow-hidden">
+                  <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full border-2 border-[#1DB954] flex items-center justify-center animate-[spin_6s_linear_infinite] relative">
+                    <div className="w-1 sm:w-1.5 h-1 sm:h-1.5 bg-[#1DB954] rounded-full absolute top-0" />
+                  </div>
+                  <span className="absolute text-[8px] sm:text-[9px] font-black tracking-widest text-[#1DB954]">DJ</span>
+                </div>
+              ) : item.type === "discovery" ? (
+                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-indigo-800 to-emerald-500 shadow-xl shrink-0 flex items-center justify-center relative">
+                  <Sparkles className="w-5 h-5 sm:w-7 sm:h-7 text-white absolute group-hover:scale-110 transition-transform" />
+                </div>
+              ) : (
+                <img referrerPolicy="no-referrer" src={item.thumbnail} alt={item.title} className="w-12 h-12 sm:w-16 sm:h-16 object-cover shrink-0" />
+              )}
+
+              <div className="flex-1 min-w-0 pr-2 flex items-center justify-between">
+                <div className="overflow-hidden">
+                  <p className="font-bold text-[11px] sm:text-xs text-white truncate leading-snug">{item.title}</p>
+                  {item.artist && (
+                    <p className="text-[10px] text-[#b3b3b3] truncate mt-0.5 leading-snug">{item.artist}</p>
+                  )}
+                </div>
+                {/* Desktop Play Indicator button */}
+                <button className="hidden sm:flex w-8 h-8 bg-[#1DB954] rounded-full items-center justify-center shadow-lg opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all shrink-0">
+                  <Play className="w-4 h-4 text-black fill-current translate-x-[0.5px]" />
                 </button>
               </div>
             </div>
           ))}
-
-          {recentTracks.length === 0 && (
-            <>
-              <div 
-                onClick={() => {
-                  if (homeFeedData?.trending?.tracks?.length > 0) {
-                    onPlayTrack(homeFeedData.trending.tracks[0], homeFeedData.trending.tracks);
-                  }
-                }}
-                className="bg-[#ffffff08] hover:bg-[#ffffff15] transition-all duration-300 rounded overflow-hidden flex items-center gap-4 cursor-pointer group"
-              >
-                <div className="w-20 h-20 bg-orange-600 flex items-center justify-center text-white font-bold shrink-0">TOP</div>
-                <div className="flex-1 min-w-0 pr-4 flex items-center justify-between">
-                  <div>
-                    <p className="font-bold text-sm text-white truncate">Top Hits</p>
-                    <p className="text-xs text-[#b3b3b3]">Tendances mondiales</p>
-                  </div>
-                </div>
-              </div>
-              <div 
-                onClick={() => {
-                  if (homeFeedData?.moods?.tracks?.length > 0) {
-                    onPlayTrack(homeFeedData.moods.tracks[0], homeFeedData.moods.tracks);
-                  }
-                }}
-                className="bg-[#ffffff08] hover:bg-[#ffffff15] transition-all duration-300 rounded overflow-hidden flex items-center gap-4 cursor-pointer group"
-              >
-                <div className="w-20 h-20 bg-teal-800 flex items-center justify-center text-white font-bold shrink-0">ZEN</div>
-                <div className="flex-1 min-w-0 pr-4 flex items-center justify-between">
-                  <div>
-                    <p className="font-bold text-sm text-white truncate">Lo-Fi Chill</p>
-                    <p className="text-xs text-[#b3b3b3]">Ambiance détente</p>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
         </div>
       </div>
 
@@ -193,28 +311,28 @@ export default function HomeView({
             ))}
           </div>
         ) : recommendations.length > 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5" id="recommendations_shelf">
+          <div className="flex md:grid md:grid-cols-4 lg:grid-cols-6 overflow-x-auto md:overflow-x-visible pb-3 md:pb-0 scrollbar-none gap-4 md:gap-5 no-scrollbar snap-x" id="recommendations_shelf">
             {recommendations.slice(0, 12).map((track) => (
               <div 
                 key={track.id}
                 onClick={() => onPlayTrack(track, recommendations)}
-                className="bg-[#181818] p-4 rounded-lg hover:bg-[#282828] transition-all duration-300 cursor-pointer group border border-transparent hover:border-neutral-800"
+                className="bg-[#181818] p-3 rounded-xl hover:bg-[#282828] transition-all duration-300 cursor-pointer group border border-transparent hover:border-neutral-800 w-[145px] shrink-0 md:w-auto md:shrink snap-start"
               >
-                <div className="relative mb-4">
+                <div className="relative mb-3">
                   <div className="w-full aspect-square bg-neutral-800 rounded shadow-lg overflow-hidden">
                     <img referrerPolicy="no-referrer" src={track.thumbnail} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                   </div>
-                  <button className="absolute right-2.5 bottom-2.5 w-11 h-11 bg-[#1DB954] rounded-full flex items-center justify-center shadow-2xl opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all hover:scale-105 active:scale-95 shrink-0">
-                    <Play className="w-5 h-5 text-black fill-current translate-x-[1px]" />
+                  <button className="absolute right-2.5 bottom-2.5 w-9 h-9 bg-[#1DB954] rounded-full flex items-center justify-center shadow-2xl opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all hover:scale-105 active:scale-95 shrink-0">
+                    <Play className="w-4 h-4 text-black fill-current translate-x-[1px]" />
                   </button>
                 </div>
-                <h4 className="font-bold text-sm mb-1 truncate text-white">{track.title}</h4>
+                <h4 className="font-bold text-xs mb-1 truncate text-white">{track.title}</h4>
                 <p 
                   onClick={(e) => {
                     e.stopPropagation();
                     onSelectArtist(track.artist);
                   }}
-                  className="text-xs text-[#b3b3b3] truncate hover:underline"
+                  className="text-[11px] text-[#b3b3b3] truncate hover:underline"
                 >
                   {track.artist}
                 </p>
@@ -378,31 +496,31 @@ export default function HomeView({
           {homeFeedData.trending?.tracks?.length > 0 && (
             <div>
               <div className="mb-4">
-                <h3 className="text-2xl font-black text-white tracking-tight">{homeFeedData.trending.title}</h3>
-                <p className="text-xs text-[#b3b3b3]">{homeFeedData.trending.description}</p>
+                <h3 className="text-2xl font-black text-white tracking-tight">Vos mix préférés</h3>
+                <p className="text-xs text-[#b3b3b3]">{homeFeedData.trending.description || "Inspiré par vos écoutes récentes"}</p>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-5">
+              <div className="flex md:grid md:grid-cols-4 lg:grid-cols-6 overflow-x-auto md:overflow-x-visible pb-3 md:pb-0 scrollbar-none gap-4 md:gap-5 no-scrollbar snap-x">
                 {homeFeedData.trending.tracks.slice(0, 6).map((track: Track) => (
                   <div 
                     key={track.id}
                     onClick={() => onPlayTrack(track, homeFeedData.trending.tracks)}
-                    className="bg-[#181818] p-4 rounded-lg hover:bg-[#282828] transition-all duration-300 cursor-pointer group border border-transparent hover:border-neutral-800"
+                    className="bg-[#181818] p-3 rounded-xl hover:bg-[#282828] transition-all duration-300 cursor-pointer group border border-transparent hover:border-neutral-800 w-[145px] shrink-0 md:w-auto md:shrink snap-start"
                   >
-                    <div className="relative mb-4">
+                    <div className="relative mb-3">
                       <div className="w-full aspect-square bg-neutral-800 rounded shadow-lg overflow-hidden">
                         <img referrerPolicy="no-referrer" src={track.thumbnail} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                       </div>
-                      <button className="absolute right-2.5 bottom-2.5 w-11 h-11 bg-[#1DB954] rounded-full flex items-center justify-center shadow-2xl opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all shrink-0">
-                        <Play className="w-5 h-5 text-black fill-current translate-x-[1px]" />
+                      <button className="absolute right-2.5 bottom-2.5 w-9 h-9 bg-[#1DB954] rounded-full flex items-center justify-center shadow-2xl opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all shrink-0">
+                        <Play className="w-4 h-4 text-black fill-current translate-x-[1px]" />
                       </button>
                     </div>
-                    <h4 className="font-bold text-sm mb-1 truncate text-white">{track.title}</h4>
+                    <h4 className="font-bold text-xs mb-1 truncate text-white">{track.title}</h4>
                     <p 
                       onClick={(e) => {
                         e.stopPropagation();
                         onSelectArtist(track.artist);
                       }}
-                      className="text-xs text-[#b3b3b3] truncate hover:underline"
+                      className="text-[11px] text-[#b3b3b3] truncate hover:underline"
                     >
                       {track.artist}
                     </p>
@@ -416,31 +534,31 @@ export default function HomeView({
           {homeFeedData.newReleases?.tracks?.length > 0 && (
             <div>
               <div className="mb-4">
-                <h3 className="text-2xl font-black text-white tracking-tight">{homeFeedData.newReleases.title}</h3>
-                <p className="text-xs text-[#b3b3b3]">{homeFeedData.newReleases.description}</p>
+                <h3 className="text-2xl font-black text-white tracking-tight">Sauvegardez les sorties à venir</h3>
+                <p className="text-xs text-[#b3b3b3]">{homeFeedData.newReleases.description || "Nouveaux singles et albums sélectionnés pour vous"}</p>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-5">
+              <div className="flex md:grid md:grid-cols-4 lg:grid-cols-6 overflow-x-auto md:overflow-x-visible pb-3 md:pb-0 scrollbar-none gap-4 md:gap-5 no-scrollbar snap-x">
                 {homeFeedData.newReleases.tracks.slice(0, 6).map((track: Track) => (
                   <div 
                     key={track.id}
                     onClick={() => onPlayTrack(track, homeFeedData.newReleases.tracks)}
-                    className="bg-[#181818] p-4 rounded-lg hover:bg-[#282828] transition-all duration-300 cursor-pointer group border border-transparent hover:border-neutral-800"
+                    className="bg-[#181818] p-3 rounded-xl hover:bg-[#282828] transition-all duration-300 cursor-pointer group border border-transparent hover:border-neutral-800 w-[145px] shrink-0 md:w-auto md:shrink snap-start"
                   >
-                    <div className="relative mb-4">
+                    <div className="relative mb-3">
                       <div className="w-full aspect-square bg-neutral-800 rounded shadow-lg overflow-hidden">
                         <img referrerPolicy="no-referrer" src={track.thumbnail} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                       </div>
-                      <button className="absolute right-2.5 bottom-2.5 w-11 h-11 bg-[#1DB954] rounded-full flex items-center justify-center shadow-2xl opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all shrink-0">
-                        <Play className="w-5 h-5 text-black fill-current translate-x-[1px]" />
+                      <button className="absolute right-2.5 bottom-2.5 w-9 h-9 bg-[#1DB954] rounded-full flex items-center justify-center shadow-2xl opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all shrink-0">
+                        <Play className="w-4 h-4 text-black fill-current translate-x-[1px]" />
                       </button>
                     </div>
-                    <h4 className="font-bold text-sm mb-1 truncate text-white">{track.title}</h4>
+                    <h4 className="font-bold text-xs mb-1 truncate text-white">{track.title}</h4>
                     <p 
                       onClick={(e) => {
                         e.stopPropagation();
                         onSelectArtist(track.artist);
                       }}
-                      className="text-xs text-[#b3b3b3] truncate hover:underline"
+                      className="text-[11px] text-[#b3b3b3] truncate hover:underline"
                     >
                       {track.artist}
                     </p>
@@ -457,28 +575,28 @@ export default function HomeView({
                 <h3 className="text-2xl font-black text-white tracking-tight">{homeFeedData.moods.title}</h3>
                 <p className="text-xs text-[#b3b3b3]">{homeFeedData.moods.description}</p>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-5">
+              <div className="flex md:grid md:grid-cols-4 lg:grid-cols-6 overflow-x-auto md:overflow-x-visible pb-3 md:pb-0 scrollbar-none gap-4 md:gap-5 no-scrollbar snap-x">
                 {homeFeedData.moods.tracks.slice(0, 6).map((track: Track) => (
                   <div 
                     key={track.id}
                     onClick={() => onPlayTrack(track, homeFeedData.moods.tracks)}
-                    className="bg-[#181818] p-4 rounded-lg hover:bg-[#282828] transition-all duration-300 cursor-pointer group border border-transparent hover:border-neutral-800"
+                    className="bg-[#181818] p-3 rounded-xl hover:bg-[#282828] transition-all duration-300 cursor-pointer group border border-transparent hover:border-neutral-800 w-[145px] shrink-0 md:w-auto md:shrink snap-start"
                   >
-                    <div className="relative mb-4">
+                    <div className="relative mb-3">
                       <div className="w-full aspect-square bg-neutral-800 rounded shadow-lg overflow-hidden">
                         <img referrerPolicy="no-referrer" src={track.thumbnail} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                       </div>
-                      <button className="absolute right-2.5 bottom-2.5 w-11 h-11 bg-[#1DB954] rounded-full flex items-center justify-center shadow-2xl opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all shrink-0">
-                        <Play className="w-5 h-5 text-black fill-current translate-x-[1px]" />
+                      <button className="absolute right-2.5 bottom-2.5 w-9 h-9 bg-[#1DB954] rounded-full flex items-center justify-center shadow-2xl opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all shrink-0">
+                        <Play className="w-4 h-4 text-black fill-current translate-x-[1px]" />
                       </button>
                     </div>
-                    <h4 className="font-bold text-sm mb-1 truncate text-white">{track.title}</h4>
+                    <h4 className="font-bold text-xs mb-1 truncate text-white">{track.title}</h4>
                     <p 
                       onClick={(e) => {
                         e.stopPropagation();
                         onSelectArtist(track.artist);
                       }}
-                      className="text-xs text-[#b3b3b3] truncate hover:underline"
+                      className="text-[11px] text-[#b3b3b3] truncate hover:underline"
                     >
                       {track.artist}
                     </p>

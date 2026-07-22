@@ -11,7 +11,8 @@ import {
   Sparkles,
   Ban,
   ChevronDown,
-  Maximize2
+  Maximize2,
+  Laptop2
 } from "lucide-react";
 import { Track } from "../types";
 
@@ -269,69 +270,65 @@ export default function Player({
       {/* 2. MOBILE FLOATING MINI-PLAYER BAR (visible on screens < md) */}
       {currentTrack && (
         <div 
-          className="fixed bottom-[58px] left-2 right-2 z-40 md:hidden bg-[#161622]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.8)] overflow-hidden select-none active:scale-[0.99] transition-transform"
+          className="fixed bottom-[56px] left-2 right-2 z-40 md:hidden bg-gradient-to-r from-[#0d5d67] to-[#073c43] border border-[#147a87]/30 rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.6)] overflow-hidden select-none active:scale-[0.99] transition-all"
           id="mobile_mini_player"
         >
-          {/* Top Thin Progress Bar */}
-          <div className="w-full h-[2px] bg-white/10 relative">
-            <div 
-              className="h-full bg-[#1DB954] transition-all duration-300"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-
           <div 
-            className="p-2.5 flex items-center justify-between gap-3 cursor-pointer"
+            className="p-2 flex items-center justify-between gap-3 cursor-pointer relative pb-3"
             onClick={() => setIsMobileExpanded(true)}
           >
             {/* Thumbnail + Title */}
-            <div className="flex items-center gap-3 overflow-hidden flex-1">
-              <div className="w-11 h-11 rounded-xl bg-neutral-800 overflow-hidden shrink-0 border border-white/10 shadow-md relative">
+            <div className="flex items-center gap-2.5 overflow-hidden flex-1">
+              <div className="w-10 h-10 rounded-lg bg-black/20 overflow-hidden shrink-0 border border-white/5 shadow-md relative">
                 <img
                   referrerPolicy="no-referrer"
                   src={currentTrack.thumbnail}
                   alt={currentTrack.title}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover animate-fade-in"
                 />
               </div>
               <div className="overflow-hidden flex-1">
-                <p className="text-xs font-bold text-white truncate">
+                <p className="text-xs font-bold text-white truncate leading-tight">
                   {currentTrack.title}
                 </p>
-                <p className="text-[11px] text-neutral-400 truncate mt-0.5">
+                <p className="text-[11px] text-[#b2d3d6] truncate mt-0.5 leading-tight">
                   {currentTrack.artist}
                 </p>
               </div>
             </div>
 
             {/* Quick Actions */}
-            <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
               <button
-                onClick={onLikeToggle}
-                className={`p-1.5 focus:outline-none transition-colors ${
-                  isLiked ? "text-[#1DB954]" : "text-neutral-400"
-                }`}
+                onClick={() => {
+                  if (typeof window !== "undefined" && "mediaSession" in navigator) {
+                    // Show a toast or feedback for connecting devices
+                  }
+                }}
+                className="p-1.5 text-white/80 hover:text-white transition-colors"
+                title="Connecter un appareil"
               >
-                <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} />
+                <Laptop2 className="w-5 h-5" />
               </button>
 
               <button
                 onClick={onPlayPauseToggle}
-                className="w-9 h-9 rounded-full bg-white text-black flex items-center justify-center font-bold shadow-md active:scale-95 transition-transform"
+                className="p-1.5 text-white hover:text-white transition-all active:scale-90"
               >
                 {isPlaying ? (
-                  <Pause className="w-4 h-4 fill-current text-black" />
+                  <Pause className="w-5 h-5 fill-current text-white" />
                 ) : (
-                  <Play className="w-4 h-4 fill-current text-black translate-x-[0.5px]" />
+                  <Play className="w-5 h-5 fill-current text-white translate-x-[0.5px]" />
                 )}
               </button>
+            </div>
 
-              <button
-                onClick={onNextTrack}
-                className="p-1.5 text-neutral-300 hover:text-white transition-colors"
-              >
-                <SkipForward className="w-5 h-5 fill-current" />
-              </button>
+            {/* Inline Progress Bar at the absolute bottom */}
+            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/10">
+              <div 
+                className="h-full bg-white transition-all duration-300"
+                style={{ width: `${progressPercent}%` }}
+              />
             </div>
           </div>
         </div>

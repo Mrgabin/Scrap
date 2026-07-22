@@ -173,7 +173,7 @@ export default function LibraryView({
                   className="bg-[#12121c]/60 hover:bg-[#1a1a28] border border-white/5 p-3 rounded-2xl cursor-pointer transition-all group active:scale-95"
                 >
                   <div className="aspect-square w-full rounded-xl overflow-hidden mb-2 relative shadow-lg">
-                    <PlaylistCover tracks={pl.tracks || []} title={pl.name} size="md" />
+                    <PlaylistCover playlist={pl} size="md" />
                   </div>
                   <p className="font-bold text-xs sm:text-sm text-white truncate group-hover:text-[#1DB954] transition-colors">
                     {pl.name}
@@ -243,7 +243,7 @@ export default function LibraryView({
                 className="bg-[#12121c]/60 hover:bg-[#1a1a28] border border-white/5 p-3 rounded-2xl cursor-pointer transition-all group active:scale-95"
               >
                 <div className="aspect-square w-full rounded-xl overflow-hidden mb-2 relative shadow-lg">
-                  <PlaylistCover tracks={pl.tracks || []} title={pl.name} size="md" />
+                  <PlaylistCover playlist={pl} size="md" />
                 </div>
                 <p className="font-bold text-xs sm:text-sm text-white truncate group-hover:text-[#1DB954] transition-colors">
                   {pl.name}

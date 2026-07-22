@@ -1063,10 +1063,11 @@ Return ONLY the JSON object. Do not wrap it in markdown code blocks or code wrap
 function getKnownArtistSongs(artistName: string): string[] | null {
   const normalized = artistName.toLowerCase().trim();
   const knownSongs: Record<string, string[]> = {
-    "the weeknd": ["Blinding Lights", "Starboy", "Save Your Tears", "The Hills", "Creepin'", "Die For You", "Can't Feel My Face", "Call Out My Name"],
-    "daft punk": ["Get Lucky", "One More Time", "Around the World", "Instant Crush", "Harder, Better, Faster, Stronger", "Something About Us", "Lose Yourself to Dance", "Veridis Quo"],
-    "stromae": ["Alors on danse", "Papaoutai", "Formidable", "Tous les mêmes", "L'enfer", "Ta fête", "Carmen", "Santé"],
-    "damso": ["Feu de bois", "Macarena", "N. J Respect R", "Smog", "Signaler", "Morose", "Ipséité", "William"],
+    "elton john": ["Rocket Man (I Think It's Going to Be a Long Long Time)", "Tiny Dancer", "Bennie and the Jets", "I'm Still Standing", "Your Song", "Goodbye Yellow Brick Road", "Crocodile Rock", "Candle in the Wind", "Don't Go Breaking My Heart", "Mona Lisas and Mad Hatters", "Daniel", "Sacrifice"],
+    "the weeknd": ["Blinding Lights", "Starboy", "Save Your Tears", "The Hills", "Creepin'", "Die For You", "Can't Feel My Face", "Call Out My Name", "Heartless", "Earned It", "Often", "In Your Eyes"],
+    "daft punk": ["Get Lucky", "One More Time", "Around the World", "Instant Crush", "Harder, Better, Faster, Stronger", "Something About Us", "Lose Yourself to Dance", "Veridis Quo", "Robot Rock", "Digital Love"],
+    "stromae": ["Alors on danse", "Papaoutai", "Formidable", "Tous les mêmes", "L'enfer", "Ta fête", "Carmen", "Santé", "Fils de joie", "Quand c'est?"],
+    "damso": ["Feu de bois", "Macarena", "N. J Respect R", "Smog", "Signaler", "Morose", "Ipséité", "William", "Découité", "Batterie rechargée"],
     "femtogo": ["femtogo track 1", "femtogo track 2", "femtogo track 3"],
     "clara luciani": ["La grenade", "Respire encore", "Amour toujours", "Le reste", "Sainte-Victoire", "Chère amie", "Nue", "Ma soeur"],
     "angèle": ["Balance ton quoi", "Tout oublier", "Bruxelles je t'aime", "Fever", "Ta reine", "Oui ou non", "Démons", "Libre"],
@@ -1083,6 +1084,57 @@ function getKnownArtistSongs(artistName: string): string[] | null {
     return knownSongs[normalized];
   }
   return null;
+}
+
+async function fetchArtistTopSongsFromITunes(artistName: string): Promise<{ title: string; rank: number; duration?: string; thumbnail?: string }[]> {
+  try {
+    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&entity=song&limit=50`;
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(3500),
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.results && data.results.length > 0) {
+        const artistLower = artistName.toLowerCase().trim();
+        const matching = data.results.filter((s: any) => {
+          const a = (s.artistName || "").toLowerCase().trim();
+          return a.includes(artistLower) || artistLower.includes(a);
+        });
+
+        if (matching.length > 0) {
+          const seenTitles = new Set<string>();
+          const songs: { title: string; rank: number; duration?: string; thumbnail?: string }[] = [];
+
+          matching.forEach((s: any, idx: number) => {
+            const rawTitle = s.trackName || "";
+            const normTitle = rawTitle.toLowerCase().replace(/\(.*\)/g, "").trim();
+            if (rawTitle && !seenTitles.has(normTitle)) {
+              seenTitles.add(normTitle);
+              const ms = s.trackTimeMillis || 210000;
+              const min = Math.floor(ms / 60000);
+              const sec = String(Math.floor((ms % 60000) / 1000)).padStart(2, "0");
+              const cover = (s.artworkUrl100 || "").replace("100x100bb", "600x600bb");
+
+              songs.push({
+                title: rawTitle,
+                rank: 1000000 - idx * 20000,
+                duration: `${min}:${sec}`,
+                thumbnail: cover
+              });
+            }
+          });
+
+          return songs;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`[iTunes Top Songs Error] Could not fetch songs for ${artistName}:`, e);
+  }
+  return [];
 }
 
 async function fetchArtistTopSongsFromGemini(artistName: string): Promise<string[]> {
@@ -1290,26 +1342,46 @@ app.get("/api/artist-tracks", async (req, res) => {
   try {
     // 1. Determine the top song titles and ranks
     let songs: { title: string; rank: number; duration?: string; thumbnail?: string }[] = [];
-    const deezerSongs = await fetchArtistTopSongsFromDeezer(name);
     
-    if (deezerSongs && deezerSongs.length > 0) {
-      songs = deezerSongs;
+    // First try iTunes Search API for globally accurate top hits
+    const itunesSongs = await fetchArtistTopSongsFromITunes(name);
+    if (itunesSongs && itunesSongs.length > 0) {
+      songs = itunesSongs;
     } else {
-      const known = getKnownArtistSongs(name);
-      if (known) {
-        songs = known.map((t, idx) => ({ title: t, rank: 1000000 - idx * 100000 }));
+      // Secondary fallback to Deezer
+      const deezerSongs = await fetchArtistTopSongsFromDeezer(name);
+      if (deezerSongs && deezerSongs.length > 0) {
+        songs = deezerSongs;
       } else {
-        const geminiSongs = await fetchArtistTopSongsFromGemini(name);
-        songs = geminiSongs.map((t, idx) => ({ title: t, rank: 1000000 - idx * 100000 }));
+        const known = getKnownArtistSongs(name);
+        if (known) {
+          songs = known.map((t, idx) => ({ title: t, rank: 1000000 - idx * 100000 }));
+        } else {
+          const geminiSongs = await fetchArtistTopSongsFromGemini(name);
+          songs = geminiSongs.map((t, idx) => ({ title: t, rank: 1000000 - idx * 100000 }));
+        }
       }
     }
 
-    // Sort songs by rank descending, and slice to top 40 popular songs
+    // Sort songs by rank descending (top hit first, down to less popular)
     songs = songs.sort((a, b) => b.rank - a.rank).slice(0, 40);
 
+    // Compute base max views for this artist (e.g., between 800M and 2.2B)
+    let artistHash = 0;
+    for (let i = 0; i < name.length; i++) {
+      artistHash = name.charCodeAt(i) + ((artistHash << 5) - artistHash);
+    }
+    let currentViews = (Math.abs(artistHash) % 1400000000) + 800000000;
+
     const validTracks = songs.map((song, idx) => {
+      // Ensure strictly decreasing view counts for visual & ranking consistency
+      if (idx > 0) {
+        const dropPercent = 0.06 + ((idx % 4) * 0.02); // 6% to 12% drop per step
+        currentViews = Math.max(1000000, Math.round(currentViews * (1 - dropPercent)));
+      }
+
+      const formattedViews = currentViews.toLocaleString("fr-FR");
       const thumbnail = song.thumbnail || getDeterministicTrackThumbnail(name, song.title, idx);
-      const views = getDeterministicTrackViews(name, song.title);
       const duration = song.duration || "3:30";
 
       return {
@@ -1318,7 +1390,7 @@ app.get("/api/artist-tracks", async (req, res) => {
         artist: name,
         duration: duration,
         thumbnail: thumbnail,
-        views: views
+        views: formattedViews
       };
     });
 
@@ -1373,6 +1445,71 @@ app.get("/api/resolve-track", async (req, res) => {
   }
 });
 
+async function fetchArtistAlbumsFromITunesAndDeezer(artistName: string): Promise<any[]> {
+  const albums: any[] = [];
+  const seenTitles = new Set<string>();
+
+  // 1. Fetch complete official discography from iTunes API
+  try {
+    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&entity=album&limit=100`;
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(3500),
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.results && data.results.length > 0) {
+        const artistLower = artistName.toLowerCase().trim();
+        data.results.forEach((a: any) => {
+          const aArtist = (a.artistName || "").toLowerCase().trim();
+          if (aArtist.includes(artistLower) || artistLower.includes(aArtist)) {
+            const title = a.collectionName || "";
+            const normTitle = title.toLowerCase().replace(/\(.*\)/g, "").trim();
+            if (title && !seenTitles.has(normTitle) && !normTitle.includes("karaoke")) {
+              seenTitles.add(normTitle);
+              albums.push({
+                id: `itunes:${a.collectionId}`,
+                title: title,
+                cover: (a.artworkUrl100 || "").replace("100x100bb", "600x600bb"),
+                year: a.releaseDate ? a.releaseDate.split("-")[0] : "2020",
+                tracksCount: a.trackCount || 10
+              });
+            }
+          }
+        });
+      }
+    }
+  } catch (e) {
+    console.warn(`[iTunes Albums Fetch Error] for ${artistName}:`, e);
+  }
+
+  // 2. Supplement with Deezer API if iTunes returns few results
+  if (albums.length < 10) {
+    try {
+      const deezerAlbums = await fetchArtistAlbumsFromDeezer(artistName);
+      deezerAlbums.forEach((a: any) => {
+        const normTitle = a.title.toLowerCase().replace(/\(.*\)/g, "").trim();
+        if (!seenTitles.has(normTitle)) {
+          seenTitles.add(normTitle);
+          albums.push(a);
+        }
+      });
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // Sort albums chronologically descending (newest albums first, down to classics)
+  albums.sort((a, b) => {
+    const yA = parseInt(a.year) || 0;
+    const yB = parseInt(b.year) || 0;
+    return yB - yA;
+  });
+
+  return albums;
+}
 
 async function fetchArtistAlbumsFromDeezer(artistName: string): Promise<any[]> {
   try {
@@ -1499,7 +1636,7 @@ app.get("/api/artist-albums", async (req, res) => {
   }
 
   try {
-    const albums = await fetchArtistAlbumsFromDeezer(name);
+    const albums = await fetchArtistAlbumsFromITunesAndDeezer(name);
     res.json({ results: albums || [] });
   } catch (error) {
     console.error("Error fetching artist albums:", error);
@@ -1520,8 +1657,34 @@ app.get("/api/album-tracks", async (req, res) => {
   try {
     let tracks: any[] = [];
     
-    // If it's a numeric Deezer album ID, fetch from Deezer
-    if (/^\d+$/.test(albumId)) {
+    // 1. Check if it's an iTunes album ID
+    if (albumId.startsWith("itunes:")) {
+      const id = albumId.replace("itunes:", "");
+      const itunesUrl = `https://itunes.apple.com/lookup?id=${id}&entity=song`;
+      const resLookup = await fetch(itunesUrl, {
+        signal: AbortSignal.timeout(3500),
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+      });
+      if (resLookup.ok) {
+        const lookupData = await resLookup.json();
+        if (lookupData && lookupData.results && lookupData.results.length > 1) {
+          const songs = lookupData.results.filter((r: any) => r.wrapperType === "track");
+          tracks = songs.map((t: any) => {
+            const ms = t.trackTimeMillis || 210000;
+            const min = Math.floor(ms / 60000);
+            const sec = String(Math.floor((ms % 60000) / 1000)).padStart(2, "0");
+            return {
+              title: t.trackName,
+              duration: `${min}:${sec}`,
+              durationSec: Math.floor(ms / 1000)
+            };
+          });
+        }
+      }
+    } else if (/^\d+$/.test(albumId)) {
+      // 2. Numeric Deezer album ID
       const deezerTracks = await fetchAlbumTracksFromDeezer(albumId);
       if (deezerTracks && deezerTracks.length > 0) {
         tracks = deezerTracks;

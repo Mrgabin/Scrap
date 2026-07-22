@@ -311,6 +311,9 @@ export default function App() {
     };
   });
   const [showTasteSurvey, setShowTasteSurvey] = useState(false);
+  const [tasteSurveyDismissed, setTasteSurveyDismissed] = useState<boolean>(() => {
+    return localStorage.getItem("scrap_taste_survey_dismissed") === "true";
+  });
   const [personalizedPlaylists, setPersonalizedPlaylists] = useState<Playlist[]>([]);
   const [loadingPersonalized, setLoadingPersonalized] = useState(false);
 
@@ -663,10 +666,20 @@ export default function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   const executeSearch = async (queryVal: string) => {
-    if (!queryVal.trim()) {
+    const trimmed = queryVal.trim();
+    if (!trimmed) {
       setSearchResults([]);
       return;
     }
+
+    addToSearchHistory({
+      id: `query_${trimmed.toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
+      name: trimmed,
+      type: "Recherche",
+      subtitle: "Recherche texte",
+      image: ""
+    });
+
     setSearchLoading(true);
     try {
       const response = await fetch(`/api/search`, {
@@ -898,6 +911,10 @@ export default function App() {
           setTasteProfile(data.tasteProfile);
         } else {
           setTasteProfile(null);
+        }
+        if (data.tasteSurveyCompleted || data.tasteSurveyDismissed) {
+          setTasteSurveyDismissed(true);
+          localStorage.setItem("scrap_taste_survey_dismissed", "true");
         }
         if (data.tasteScores) {
           setTasteScores(data.tasteScores);
@@ -1134,19 +1151,17 @@ export default function App() {
     }
   };
 
-  // 4.5. Monitor Taste Survey status and prompt if missing
+  // 4.5. Monitor Taste Survey status
   useEffect(() => {
-    if (user && tasteProfile === null && !loadingAuth) {
-      const timer = setTimeout(() => {
-        if (tasteProfile === null) {
-          setShowTasteSurvey(true);
-        }
-      }, 1500);
-      return () => clearTimeout(timer);
-    } else if (tasteProfile !== null) {
+    const localDismissed = localStorage.getItem("scrap_taste_survey_dismissed") === "true";
+    if (localDismissed && !tasteSurveyDismissed) {
+      setTasteSurveyDismissed(true);
+    }
+
+    if (tasteProfile !== null || tasteSurveyDismissed || localDismissed) {
       setShowTasteSurvey(false);
     }
-  }, [user, tasteProfile, loadingAuth]);
+  }, [user, tasteProfile, tasteSurveyDismissed]);
 
   // 5. App Navigation helpers
   const handleSelectArtist = (artistName: string) => {
@@ -2073,6 +2088,19 @@ export default function App() {
     }
   };
 
+  const handleCloseTasteSurvey = async () => {
+    setShowTasteSurvey(false);
+    setTasteSurveyDismissed(true);
+    localStorage.setItem("scrap_taste_survey_dismissed", "true");
+    if (user && !user.isGuest) {
+      try {
+        await setDoc(doc(db, "users", user.uid), { tasteSurveyDismissed: true }, { merge: true });
+      } catch (err) {
+        console.error("Error saving survey dismissed state:", err);
+      }
+    }
+  };
+
   const handleTasteSurveySubmit = async (profile: any) => {
     if (!user) return;
     setLoadingPersonalized(true);
@@ -2094,17 +2122,24 @@ export default function App() {
           // In guest mode, do not persist taste profile or personalized playlists to localStorage (keep in-memory only)
           setTasteProfile(profile);
           setPersonalizedPlaylists(data.playlists);
+          localStorage.setItem("scrap_taste_survey_dismissed", "true");
         } else {
           // Save in Firestore
-          await setDoc(doc(db, "users", user.uid), { tasteProfile: profile }, { merge: true });
+          await setDoc(doc(db, "users", user.uid), {
+            tasteProfile: profile,
+            tasteSurveyCompleted: true,
+            tasteSurveyDismissed: true
+          }, { merge: true });
           
           for (const pl of data.playlists) {
             await setDoc(doc(db, "users", user.uid, "personalizedPlaylists", pl.id), pl);
           }
           setTasteProfile(profile);
           setPersonalizedPlaylists(data.playlists);
+          localStorage.setItem("scrap_taste_survey_dismissed", "true");
         }
       }
+      setTasteSurveyDismissed(true);
       setShowTasteSurvey(false);
     } catch (err: any) {
       console.error("Failed to generate personalized mixes:", err);
@@ -2170,6 +2205,16 @@ export default function App() {
     } else {
       await auth.signOut();
     }
+    // Explicitly reset user states on active logout
+    setLikedTracks([]);
+    setCustomPlaylists([]);
+    setRecentTracks([]);
+    setFollowedArtists([]);
+    setPersonalizedPlaylists([]);
+    setTasteProfile(null);
+    setTasteSurveyDismissed(false);
+    setShowTasteSurvey(false);
+
     // Explicitly reset player state on active logout
     setCurrentTrack(null);
     setIsPlaying(false);
@@ -2178,6 +2223,8 @@ export default function App() {
     setSeekTo(null);
     setPlaybackHistory([]);
     setPlaybackForwardHistory([]);
+    
+    // Clear all user storage keys
     localStorage.removeItem("spotify_last_track");
     localStorage.removeItem("spotify_last_queue");
     localStorage.removeItem("spotify_last_queue_index");
@@ -2187,6 +2234,9 @@ export default function App() {
     localStorage.removeItem("spotify_last_volume");
     localStorage.removeItem("spotify_playback_history");
     localStorage.removeItem("spotify_playback_forward_history");
+    localStorage.removeItem("scrap_taste_survey_dismissed");
+    localStorage.removeItem("spotify_taste_scores");
+    localStorage.removeItem("scrap_search_history");
   };
 
   const handleSaveSpotifyCredentials = async (clientId: string, secret: string) => {
@@ -2538,7 +2588,7 @@ export default function App() {
   }
 
   return (
-    <div className="w-full h-screen bg-transparent text-white font-sans flex flex-col overflow-hidden select-none relative">
+    <div className="w-full h-screen h-[100dvh] max-h-[100dvh] bg-transparent text-white font-sans flex flex-col overflow-hidden select-none relative">
       {/* Dynamic Background Theme Renderer */}
       {(() => {
         if (!customBackgroundUrl || customBackgroundUrl === "trou_noir") {
@@ -2923,6 +2973,7 @@ export default function App() {
                 artistAvatars={artistAvatars}
                 tasteProfile={tasteProfile}
                 personalizedPlaylists={personalizedPlaylists}
+                playlists={customPlaylists}
                 onOpenTasteSurvey={() => setShowTasteSurvey(true)}
                 onRegenerateMixes={handleRegenerateMixes}
                 loadingPersonalized={loadingPersonalized}
@@ -2951,6 +3002,7 @@ export default function App() {
                 followedArtists={followedArtists}
                 onToggleFollowArtist={handleToggleFollowArtist}
                 artistAvatars={artistAvatars}
+                onAddToSearchHistory={addToSearchHistory}
               />
             )}
 
@@ -3218,7 +3270,7 @@ export default function App() {
       {/* Taste Survey Questionnaire Overlay */}
       <TasteSurveyModal 
         isOpen={showTasteSurvey}
-        onClose={() => setShowTasteSurvey(false)}
+        onClose={handleCloseTasteSurvey}
         onSubmit={handleTasteSurveySubmit}
         isGuest={user?.isGuest}
       />

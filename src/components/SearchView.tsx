@@ -31,6 +31,16 @@ interface SearchViewProps {
   followedArtists: string[];
   onToggleFollowArtist: (artistName: string) => void;
   artistAvatars: Record<string, string>;
+  onAddToSearchHistory?: (item: {
+    id: string;
+    name: string;
+    type: string;
+    subtitle: string;
+    image: string;
+    track?: any;
+    artistName?: string;
+    playlistId?: string;
+  }) => void;
 }
 
 const CATEGORIES = [
@@ -118,13 +128,26 @@ export default function SearchView({
   onToggleLike,
   followedArtists,
   onToggleFollowArtist,
-  artistAvatars
+  artistAvatars,
+  onAddToSearchHistory
 }: SearchViewProps) {
   const { t } = useTranslation();
   const [activeFilter, setActiveFilter] = useState("Tout");
   const [openPlaylistDropdownId, setOpenPlaylistDropdownId] = useState<string | null>(null);
 
   const logSearchClick = (item: any) => {
+    if (onAddToSearchHistory) {
+      onAddToSearchHistory({
+        id: item.id || `search_${Date.now()}`,
+        name: item.title || item.name || query,
+        type: item.type || "Recherche",
+        subtitle: item.subtitle || item.artistName || "",
+        image: item.thumbnail || item.image || "",
+        track: item.track,
+        artistName: item.artistName,
+        playlistId: item.playlist?.id
+      });
+    }
     if (!query) return;
     const cleanId = String(item.id || "").replace(/^(track-|custom-playlist-|artist-|curated-playlist-\d+-)/, "");
     fetch("/api/search/click", {

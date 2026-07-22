@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { updateEmail, updatePassword, updateProfile, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 import { doc, getDoc, updateDoc, setDoc, collection, getDocs, deleteDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
-import { User, Shield, Image as ImageIcon, Save, CheckCircle, AlertTriangle, Heart, UserMinus, Music, ExternalLink, LogOut, Trash2, Loader2, Key, Sparkles, Github, HelpCircle } from "lucide-react";
+import { User, Shield, Image as ImageIcon, Save, CheckCircle, AlertTriangle, Heart, UserMinus, Music, ExternalLink, LogOut, Trash2, Loader2, Key, Sparkles, Github, HelpCircle, Smartphone, Download, PlusSquare } from "lucide-react";
+import InstallPwaModal from "./InstallPwaModal";
 import { getDeterministicArtistAvatar } from "../lib/avatarHelper";
 
 interface SettingsViewProps {
@@ -50,6 +51,7 @@ export default function SettingsView({
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [showInstallPwaModal, setShowInstallPwaModal] = useState(false);
 
   const openDeleteModal = () => {
     setDeleteStep(1);
@@ -91,7 +93,14 @@ export default function SettingsView({
       }
 
       // 3. Delete all subcollection documents in Firestore
-      const collectionsToDelete = ["likedTracks", "playlists", "history", "followedArtists"];
+      const collectionsToDelete = [
+        "likedTracks",
+        "playlists",
+        "history",
+        "followedArtists",
+        "personalizedPlaylists",
+        "searchHistory"
+      ];
       for (const colName of collectionsToDelete) {
         const colRef = collection(db, "users", user.uid, colName);
         const colSnap = await getDocs(colRef);
@@ -111,7 +120,8 @@ export default function SettingsView({
         await deleteUser(auth.currentUser);
       }
 
-      // 7. Close modal and logout
+      // 7. Clear local cache and logout
+      localStorage.clear();
       setShowDeleteModal(false);
       if (onLogout) {
         onLogout();
@@ -787,6 +797,42 @@ export default function SettingsView({
         )}
       </div>
 
+      {/* Application Mobile & PWA Section */}
+      <div className="bg-[#181818] rounded-xl p-6 border border-[#282828] mt-8 flex flex-col gap-6" id="settings_pwa_section">
+        <div className="flex items-center justify-between pb-4 border-b border-[#282828]">
+          <div className="flex items-center gap-3">
+            <Smartphone className="w-5 h-5 text-[#1DB954]" />
+            <h3 className="font-bold text-lg">Application Mobile • Écran d'Accueil iOS & Android</h3>
+          </div>
+          <span className="text-xs bg-[#1DB954]/10 text-[#1DB954] border border-[#1DB954]/20 px-2.5 py-1 rounded-full font-bold">
+            Mode PWA Standalone
+          </span>
+        </div>
+
+        <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-gradient-to-r from-neutral-900 to-black p-5 rounded-xl border border-white/5">
+          <div className="flex items-center gap-4">
+            <div className="relative w-14 h-14 rounded-2xl overflow-hidden border border-white/10 shrink-0 shadow-lg">
+              <img src="/icon.png" alt="Scrap Logo" className="w-full h-full object-cover" />
+            </div>
+            <div>
+              <h4 className="font-bold text-white text-base">Installer Scrap comme une vraie App</h4>
+              <p className="text-xs text-neutral-400 mt-1 max-w-lg leading-relaxed">
+                Ajoutez le logo et l'icône Scrap directement sur l'écran d'accueil de votre iPhone, iPad ou téléphone Android pour lancer le lecteur en plein écran sans barre de navigateur !
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowInstallPwaModal(true)}
+            className="w-full md:w-auto px-6 py-3 bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold text-sm rounded-full flex items-center justify-center gap-2 shadow-lg transition-transform hover:scale-105 active:scale-95 shrink-0 cursor-pointer"
+          >
+            <Download className="w-4 h-4" />
+            Installer l'application
+          </button>
+        </div>
+      </div>
+
       {/* À propos & En savoir plus Section */}
       <div className="bg-[#181818] rounded-xl p-6 border border-[#282828] mt-8 flex flex-col gap-6" id="settings_about_section">
         <div className="flex items-center justify-between pb-4 border-b border-[#282828]">
@@ -977,6 +1023,11 @@ export default function SettingsView({
         </div>
       )}
 
+      {/* Install PWA Modal */}
+      <InstallPwaModal 
+        isOpen={showInstallPwaModal} 
+        onClose={() => setShowInstallPwaModal(false)} 
+      />
     </div>
   );
 }

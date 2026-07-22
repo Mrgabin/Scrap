@@ -298,7 +298,7 @@ export default function Player({
       {/* 2. MOBILE FLOATING MINI-PLAYER BAR (visible on screens < md) */}
       {currentTrack && (
         <div 
-          className="fixed bottom-[56px] left-2 right-2 z-40 md:hidden bg-gradient-to-r from-[#0d5d67] to-[#073c43] border border-[#147a87]/30 rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.6)] overflow-hidden select-none active:scale-[0.99] transition-all"
+          className="fixed bottom-[calc(56px+env(safe-area-inset-bottom,0px))] left-2 right-2 z-40 md:hidden bg-gradient-to-r from-[#0d5d67] to-[#073c43] border border-[#147a87]/30 rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.6)] overflow-hidden select-none active:scale-[0.99] transition-all"
           id="mobile_mini_player"
         >
           <div 
@@ -444,11 +444,31 @@ export default function Player({
             {/* Shuffle */}
             <button
               onClick={onShuffleToggle}
-              className={`p-3 rounded-full transition-all active:scale-90 ${
+              className={`p-3 rounded-full transition-all active:scale-90 relative flex flex-col items-center justify-center ${
                 shuffleMode > 0 ? "text-[#1DB954] bg-[#1DB954]/10" : "text-neutral-400"
               }`}
+              title={
+                shuffleMode === 0 
+                  ? "Activer l'aléatoire" 
+                  : shuffleMode === 1 
+                  ? "Aléatoire" 
+                  : "Smart Shuffle (Mode IA)"
+              }
             >
-              <Shuffle className="w-6 h-6" />
+              <div className="relative flex items-center justify-center">
+                <Shuffle className="w-6 h-6" />
+                {shuffleMode === 2 && (
+                  <Sparkles className="w-3.5 h-3.5 text-[#1DB954] absolute -top-2 -left-2 fill-current animate-pulse" />
+                )}
+              </div>
+              {shuffleMode === 2 && (
+                <span className="absolute -bottom-1.5 bg-[#1DB954] text-black text-[8px] font-black px-1.5 py-0.2 rounded-full tracking-wider uppercase shadow-[0_0_8px_#1DB954]">
+                  IA
+                </span>
+              )}
+              {shuffleMode === 1 && (
+                <span className="absolute -bottom-1 w-1.5 h-1.5 bg-[#1DB954] rounded-full shadow-[0_0_6px_#1DB954]" />
+              )}
             </button>
 
             {/* Prev */}

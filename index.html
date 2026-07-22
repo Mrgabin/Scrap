@@ -1,10 +1,33 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Scrap v4.13</title>
-    <link rel="icon" type="image/png" href="public/icon.png" />
+    
+    <!-- PWA & Web App Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Scrap" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#090909" />
+    
+    <!-- Icons & Manifest -->
+    <link rel="icon" type="image/png" href="/icon.png" />
+    <link rel="apple-touch-icon" href="/icon.png" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <script>
+      // Prevent pinch-to-zoom on iOS Safari and mobile devices
+      document.addEventListener('gesturestart', function (e) {
+        e.preventDefault();
+      });
+      document.addEventListener('touchmove', function (e) {
+        if (e.touches.length > 1) {
+          e.preventDefault();
+        }
+      }, { passive: false });
+    </script>
   </head>
   <body>
     <div id="root"></div>

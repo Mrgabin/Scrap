@@ -19,6 +19,7 @@ interface HomeViewProps {
   artistAvatars?: Record<string, string>;
   tasteProfile?: any;
   personalizedPlaylists?: Playlist[];
+  playlists?: Playlist[];
   onOpenTasteSurvey?: () => void;
   onRegenerateMixes?: () => void;
   loadingPersonalized?: boolean;
@@ -41,6 +42,7 @@ export default function HomeView({
   artistAvatars,
   tasteProfile = null,
   personalizedPlaylists = [],
+  playlists = [],
   onOpenTasteSurvey = () => {},
   onRegenerateMixes = () => {},
   loadingPersonalized = false,
@@ -116,6 +118,19 @@ export default function HomeView({
     thumbnail: "discovery-gradient"
   });
 
+  // User playlists
+  playlists.slice(0, 4).forEach((pl, index) => {
+    if (quickGridItems.length < 8) {
+      quickGridItems.push({
+        id: `pl-${pl.id}-${index}`,
+        title: pl.name,
+        type: "playlist",
+        playlist: pl,
+        thumbnail: pl.tracks?.[0]?.thumbnail || ""
+      });
+    }
+  });
+
   // Recent tracks
   recentTracks.slice(0, 4).forEach((track, index) => {
     if (quickGridItems.length < 8) {
@@ -130,7 +145,7 @@ export default function HomeView({
     }
   });
 
-  // If still have space, add followed artists
+  // Followed artists
   followedArtists.slice(0, 4).forEach((artist, index) => {
     if (quickGridItems.length < 8) {
       quickGridItems.push({
@@ -143,20 +158,19 @@ export default function HomeView({
     }
   });
 
-  // Fallback items to get exactly 8
-  const fallbacks = [
-    { id: "fallback-luther", title: "Luther", type: "artist", artistName: "Luther", thumbnail: getDeterministicArtistAvatar("Luther") },
-    { id: "fallback-eminem", title: "Eminem", type: "artist", artistName: "Eminem", thumbnail: getDeterministicArtistAvatar("Eminem") },
-    { id: "fallback-damso", title: "Damso", type: "artist", artistName: "Damso", thumbnail: getDeterministicArtistAvatar("Damso") },
-    { id: "fallback-elton", title: "Elton John", type: "artist", artistName: "Elton John", thumbnail: getDeterministicArtistAvatar("Elton John") },
-    { id: "fallback-speed", title: "IShowSpeed", type: "artist", artistName: "IShowSpeed", thumbnail: getDeterministicArtistAvatar("IShowSpeed") },
-    { id: "fallback-sad", title: "Sad songs for tik tok edits", type: "playlist-sad", thumbnail: "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=150" }
-  ];
-
-  while (quickGridItems.length < 8 && fallbacks.length > 0) {
-    const fb = fallbacks.shift();
-    if (fb && !quickGridItems.some(item => item.title === fb.title)) {
-      quickGridItems.push(fb);
+  // Fill remaining slots up to 8 with real Curated Playlists (not fake listening history)
+  if (CURATED_PLAYLISTS && CURATED_PLAYLISTS.length > 0) {
+    for (const pl of CURATED_PLAYLISTS) {
+      if (quickGridItems.length >= 8) break;
+      if (!quickGridItems.some(item => item.title === pl.name)) {
+        quickGridItems.push({
+          id: `curated-${pl.id}`,
+          title: pl.name,
+          type: "curated-playlist",
+          playlist: pl,
+          thumbnail: pl.tracks?.[0]?.thumbnail || ""
+        });
+      }
     }
   }
 
@@ -181,10 +195,10 @@ export default function HomeView({
       onPlayTrack(item.track, recentTracks);
     } else if (item.type === "artist" && item.artistName) {
       onSelectArtist(item.artistName);
-    } else if (item.type === "playlist-sad") {
-      if (homeFeedData?.moods?.tracks?.length > 0) {
-        onPlayTrack(homeFeedData.moods.tracks[0], homeFeedData.moods.tracks);
-      }
+    } else if (item.type === "playlist" && item.playlist) {
+      onSelectPlaylist(item.playlist);
+    } else if (item.type === "curated-playlist" && item.playlist) {
+      onSelectPlaylist(item.playlist);
     }
   };
 

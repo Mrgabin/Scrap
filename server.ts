@@ -2323,7 +2323,8 @@ app.post("/api/spotify/import", async (req, res) => {
 
 // Vite Middleware for Full Stack setup
 async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
+  const isDev = process.env.NODE_ENV !== "production" || (!import.meta.url.includes('/dist/') && !import.meta.url.endsWith('server.cjs'));
+  if (isDev) {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },

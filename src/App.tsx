@@ -1824,20 +1824,40 @@ export default function App() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    if (isPlaying && currentTrack) {
+    // Helper to ensure silent audio is initialized and unlocked during user gestures
+    const ensureSilentAudio = () => {
       if (!silentAudioRef.current) {
-        // Simple 1-second silent WAV format looping audio
+        // 1-second silent WAV format looping audio
         silentAudioRef.current = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==");
         silentAudioRef.current.loop = true;
       }
-      silentAudioRef.current.play().catch(err => {
-        console.log("Background audio silent keeper active:", err);
-      });
+      if (isPlaying && currentTrack) {
+        silentAudioRef.current.play().catch((err) => {
+          console.log("Background audio silent keeper waiting for user interaction:", err);
+        });
+      }
+    };
+
+    // Unlock audio context on any user interaction gesture
+    const handleUserInteraction = () => {
+      ensureSilentAudio();
+    };
+
+    window.addEventListener("pointerdown", handleUserInteraction, { once: true });
+    window.addEventListener("touchstart", handleUserInteraction, { once: true });
+
+    if (isPlaying && currentTrack) {
+      ensureSilentAudio();
     } else {
       if (silentAudioRef.current) {
         silentAudioRef.current.pause();
       }
     }
+
+    return () => {
+      window.removeEventListener("pointerdown", handleUserInteraction);
+      window.removeEventListener("touchstart", handleUserInteraction);
+    };
   }, [isPlaying, currentTrack]);
 
   useEffect(() => {

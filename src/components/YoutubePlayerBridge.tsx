@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Move, ChevronUp, ChevronDown } from "lucide-react";
 import { Track } from "../types";
 
 interface YoutubePlayerBridgeProps {
@@ -162,6 +163,7 @@ export default function YoutubePlayerBridge({
           showinfo: 0,
           iv_load_policy: 3,
           enablejsapi: 1,
+          playsinline: 1,
           origin: window.location.origin
         },
         events: {
@@ -173,6 +175,8 @@ export default function YoutubePlayerBridge({
               const iframe = event.target.getIframe();
               if (iframe) {
                 iframe.setAttribute("allow", "autoplay; encrypted-media; picture-in-picture");
+                iframe.setAttribute("playsinline", "1");
+                iframe.setAttribute("webkit-playsinline", "1");
               }
             } catch (e) {
               console.warn("Could not set allow attributes on iframe:", e);
@@ -358,6 +362,26 @@ export default function YoutubePlayerBridge({
     }, 500);
   };
 
+  const [mobilePos, setMobilePos] = useState<"top-right" | "top-left" | "bottom-left">("top-right");
+
+  const cycleMobilePos = () => {
+    if (mobilePos === "top-right") setMobilePos("top-left");
+    else if (mobilePos === "top-left") setMobilePos("bottom-left");
+    else setMobilePos("top-right");
+  };
+
+  const getPositionClasses = () => {
+    switch (mobilePos) {
+      case "top-left":
+        return "top-[calc(3.8rem+env(safe-area-inset-top,0px))] left-3 right-auto bottom-auto md:top-auto md:bottom-28 md:right-6 md:left-auto";
+      case "bottom-left":
+        return "bottom-36 left-3 right-auto top-auto md:top-auto md:bottom-28 md:right-6 md:left-auto";
+      case "top-right":
+      default:
+        return "top-[calc(3.8rem+env(safe-area-inset-top,0px))] right-3 left-auto bottom-auto md:top-auto md:bottom-28 md:right-6 md:left-auto";
+    }
+  };
+
   const stopTimer = () => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -367,45 +391,96 @@ export default function YoutubePlayerBridge({
 
   if (!currentTrack) return null;
 
+  const isBlockedWhileMinimized = minimized && showAutoplayWarning;
+
   return (
     <div 
-      className="fixed z-50 bg-[#181818] border border-neutral-800 rounded-lg shadow-2xl transition-all duration-300 flex flex-col overflow-hidden select-none" 
+      className={`fixed z-50 bg-[#181818] border ${
+        isBlockedWhileMinimized 
+          ? "border-[#1DB954] shadow-[0_0_25px_rgba(29,185,84,0.6)] animate-bounce" 
+          : "border-neutral-800 shadow-2xl"
+      } rounded-xl transition-all duration-300 flex flex-col overflow-hidden select-none ${getPositionClasses()}`} 
       style={{ 
-        bottom: "110px", 
-        right: "24px", 
-        width: minimized ? "180px" : "320px", 
-        height: minimized ? "48px" : showAutoplayWarning ? "268px" : "220px",
+        width: minimized ? (isBlockedWhileMinimized ? "260px" : "180px") : "320px", 
+        height: minimized ? (isBlockedWhileMinimized ? "64px" : "48px") : showAutoplayWarning ? "268px" : "220px",
       }}
     >
       {/* Header bar */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-neutral-900 border-b border-neutral-800 text-neutral-200">
-        <span className="text-[10px] font-bold tracking-wider uppercase truncate max-w-[120px] flex items-center gap-1.5">
-          <span className="flex h-1.5 w-1.5 relative">
-            {isPlaying && (
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#1DB954] opacity-75"></span>
-            )}
-            <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${isPlaying ? "bg-[#1DB954]" : "bg-neutral-500"}`}></span>
-          </span>
-          {minimized ? "Vidéo réduite" : "Lecteur Vidéo"}
+      <div 
+        onClick={() => {
+          if (minimized) setMinimized(false);
+        }}
+        className={`flex items-center justify-between px-3 py-2 ${
+          isBlockedWhileMinimized ? "bg-[#1DB954] text-black cursor-pointer" : "bg-neutral-900 border-b border-neutral-800 text-neutral-200"
+        }`}
+      >
+        <span className="text-[10px] font-bold tracking-wider uppercase truncate max-w-[170px] flex items-center gap-1.5">
+          {isBlockedWhileMinimized ? (
+            <span className="flex items-center gap-1.5 font-black text-black">
+              <span className="w-2 h-2 rounded-full bg-black animate-ping" />
+              🎬 DÉBLOQUER VIDÉO
+            </span>
+          ) : (
+            <>
+              <span className="flex h-1.5 w-1.5 relative shrink-0">
+                {isPlaying && (
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#1DB954] opacity-75"></span>
+                )}
+                <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${isPlaying ? "bg-[#1DB954]" : "bg-neutral-500"}`}></span>
+              </span>
+              <span className="truncate">{minimized ? "Vidéo réduite" : "Lecteur Vidéo"}</span>
+            </>
+          )}
         </span>
-        <button 
-          onClick={() => setMinimized(!minimized)} 
-          className="text-xs text-neutral-400 hover:text-white transition-colors p-1 font-mono focus:outline-none"
-          title={minimized ? "Agrandir le lecteur" : "Réduire le lecteur"}
-        >
-          {minimized ? "▲" : "▼"}
-        </button>
+
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Position move button */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              cycleMobilePos();
+            }}
+            className={`p-1 rounded hover:bg-white/10 transition-colors ${isBlockedWhileMinimized ? "text-black" : "text-neutral-400 hover:text-white"}`}
+            title="Déplacer la fenêtre (Haut-Droit / Haut-Gauche / Bas)"
+          >
+            <Move className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Minimize / Maximize button */}
+          <button 
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setMinimized(!minimized);
+            }} 
+            className={`p-1 rounded hover:bg-white/10 transition-colors ${isBlockedWhileMinimized ? "text-black font-bold" : "text-neutral-400 hover:text-white"}`}
+            title={minimized ? "Agrandir le lecteur" : "Réduire le lecteur"}
+          >
+            {minimized ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+        </div>
       </div>
 
-      {/* Warning banner when autoplay is blocked */}
+      {/* Helper text when blocked in minimized mode */}
+      {isBlockedWhileMinimized && (
+        <div 
+          onClick={() => setMinimized(false)}
+          className="bg-black/90 text-white text-[10px] px-2 py-1 text-center font-medium cursor-pointer border-t border-black/20"
+        >
+          Touchez pour afficher le lecteur et cliquer sur la vidéo 🎬
+        </div>
+      )}
+
+      {/* Warning banner when autoplay is blocked in full mode */}
       {showAutoplayWarning && !minimized && (
         <div className="bg-[#1DB954]/20 border-b border-[#1DB954]/40 px-3 py-2 text-center text-[11px] text-[#1DB954] font-bold animate-pulse flex flex-col gap-0.5 justify-center items-center shrink-0">
           <p className="flex items-center gap-1.5 justify-center">
             <span className="inline-block w-2 h-2 rounded-full bg-[#1DB954] animate-ping" />
-            <span>CLIQUEZ SUR LE LECTEUR VIDÉO</span>
+            <span>CLIQUEZ SUR LA VIDÉO CI-DESSOUS</span>
           </p>
           <p className="text-[10px] text-neutral-400 font-normal">
-            Pour lancer la musique (Autoplay bloqué)
+            L'autoplay de votre navigateur nécessite un clic manuel
           </p>
         </div>
       )}

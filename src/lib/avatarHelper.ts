@@ -71,6 +71,32 @@ export function getDeterministicArtistAvatar(artistName: string): string {
     return "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=300&q=80"; // Elegant classic French female portrait
   } else if (normalized.includes("angèle") || normalized.includes("angele")) {
     return "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=300&q=80"; // Bright charismatic Belgian pop female
+  } else if (normalized.includes("ninho")) {
+    return "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=300&q=80"; // Intense male portrait
+  } else if (normalized.includes("gazo")) {
+    return "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80"; // Stylish streetwear male
+  } else if (normalized.includes("tiakola")) {
+    return "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80"; // Joyful charisma
+  } else if (normalized.includes("werenoi")) {
+    return "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=300&q=80"; // Mysterious dark aesthetic
+  } else if (normalized.includes("plk") || normalized.includes("nekfeu")) {
+    return "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=300&q=80"; // Clean French style streetwear portrait
+  } else if (normalized.includes("damso")) {
+    return "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80"; // Dark beard portrait
+  } else if (normalized.includes("sdm")) {
+    return "https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?auto=format&fit=crop&w=300&q=80"; // Powerful neon streetwear model
+  } else if (normalized.includes("jul")) {
+    return "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=300&q=80"; // Street sportswear cap look
+  } else if (normalized.includes("booba") || normalized.includes("sch")) {
+    return "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80"; // Alpha male model portrait
+  } else if (normalized.includes("pnl")) {
+    return "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=300&q=80"; // Night neon background brothers
+  } else if (normalized.includes("hamza")) {
+    return "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=300&q=80"; // Trendy trap portrait
+  } else if (normalized.includes("orelsan") || normalized.includes("lomepal")) {
+    return "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=300&q=80"; // Indie alternative male
+  } else if (normalized.includes("dadju") || normalized.includes("tayc")) {
+    return "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80"; // Elegant R&B pop male portrait
   } else if (normalized.includes("lofi girl") || normalized.includes("chill") || normalized.includes("sleep")) {
     return "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?auto=format&fit=crop&w=300&q=80"; // Cozy lofi study desk / nature
   } else if (normalized.includes("queen")) {

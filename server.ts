@@ -2321,9 +2321,19 @@ app.post("/api/spotify/import", async (req, res) => {
   }
 });
 
+// Global Error Handler for Vercel/Production debugging
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error("GLOBAL SERVER ERROR:", err);
+  res.status(500).json({
+    error: "Erreur interne du serveur",
+    message: err?.message || String(err),
+    stack: process.env.NODE_ENV !== "production" ? err?.stack : undefined
+  });
+});
+
 // Vite Middleware for Full Stack setup
 async function startServer() {
-  const isDev = process.env.NODE_ENV !== "production" || (!import.meta.url.includes('/dist/') && !import.meta.url.endsWith('server.cjs'));
+  const isDev = process.env.NODE_ENV !== "production" || (typeof import.meta !== "undefined" && import.meta && import.meta.url && !import.meta.url.includes('/dist/') && !import.meta.url.endsWith('server.cjs'));
   if (isDev) {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({

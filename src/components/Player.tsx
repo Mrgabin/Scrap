@@ -363,7 +363,7 @@ export default function Player({
       {/* 3. MOBILE FULL-SCREEN PLAYER MODAL OVERLAY */}
       {currentTrack && isMobileExpanded && (
         <div 
-          className="fixed inset-0 z-50 bg-gradient-to-b from-[#18182c] via-[#0d0d16] to-[#08080f] flex flex-col p-6 text-white md:hidden animate-in slide-in-from-bottom duration-300 select-none overflow-y-auto"
+          className="fixed inset-0 z-50 bg-gradient-to-b from-[#18182c] via-[#0d0d16] to-[#08080f] flex flex-col p-6 pt-safe pb-safe text-white md:hidden animate-in slide-in-from-bottom duration-300 select-none overflow-y-auto"
           id="mobile_fullscreen_player"
         >
           {/* Modal Header */}

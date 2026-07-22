@@ -115,7 +115,7 @@ export default function TasteSurveyModal({ isOpen, onSubmit, isGuest = false }: 
   };
 
   return (
-    <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[9999] flex items-center justify-center p-4 overflow-y-auto select-none" id="taste_survey_modal">
+    <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[9999] flex items-center justify-center p-4 pt-safe pb-safe overflow-y-auto select-none" id="taste_survey_modal">
       <div className="bg-[#121212] border border-neutral-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]">
         
         {/* Progress bar */}

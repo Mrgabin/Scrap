@@ -49,7 +49,7 @@ export default function InstallPwaModal({ isOpen, onClose }: InstallPwaModalProp
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pt-safe pb-safe bg-black/80 backdrop-blur-md animate-fadeIn">
       <div className="bg-[#121212] border border-white/10 w-full max-w-md rounded-2xl p-6 shadow-2xl text-white relative overflow-hidden">
         {/* Close Button */}
         <button

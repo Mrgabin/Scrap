@@ -156,11 +156,15 @@ async function searchYouTube(query: string, limit = 15): Promise<any[]> {
     const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
     let lastError: any = null;
 
-    // Retry up to 2 times
-    for (let attempt = 1; attempt <= 2; attempt++) {
+    const isVercel = !!process.env.VERCEL;
+    const timeoutDuration = isVercel ? 1500 : 2500;
+    const maxAttempts = isVercel ? 1 : 2;
+
+    // Retry up to maxAttempts times
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const response = await fetch(url, {
-          signal: AbortSignal.timeout(8000), // more generous timeout (8s)
+          signal: AbortSignal.timeout(timeoutDuration),
           headers: {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -236,8 +240,8 @@ async function searchYouTube(query: string, limit = 15): Promise<any[]> {
       } catch (error) {
         lastError = error;
         // Wait briefly before retry
-        if (attempt === 1) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
+        if (attempt < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, 200));
         }
       }
     }
@@ -452,6 +456,7 @@ function getDeterministicStats(artistName: string) {
 // Helper: Fetch real artist profile avatar, official banner, subscribers, and bio
 async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
   const normalized = artistName.toLowerCase().trim();
+  const isVercel = !!process.env.VERCEL;
   
   // Known default premium artist backgrounds & details if scrape fails or as standard base:
   const knownData: Record<string, { banner: string; listeners: string; bio: string; avatar?: string }> = {
@@ -493,7 +498,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
     const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(artistName)}`;
     try {
       const response = await fetch(searchUrl, {
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(isVercel ? 1200 : 3000),
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -587,7 +592,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
       const filterUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(artistName)}&sp=EgIQAg%253D%253D`;
       try {
         const response = await fetch(filterUrl, {
-          signal: AbortSignal.timeout(3000),
+          signal: AbortSignal.timeout(isVercel ? 1000 : 3000),
           headers: {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -643,7 +648,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
       try {
         const channelPageUrl = `https://www.youtube.com/channel/${channelId}`;
         const chanResponse = await fetch(channelPageUrl, {
-          signal: AbortSignal.timeout(3000),
+          signal: AbortSignal.timeout(isVercel ? 1000 : 3000),
           headers: {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -720,7 +725,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
     try {
       const wikiUrl = `https://fr.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(artistName)}&gsrlimit=1&prop=pageimages&piprop=original&format=json&origin=*`;
       const wikiResponse = await fetch(wikiUrl, {
-        signal: AbortSignal.timeout(1500),
+        signal: AbortSignal.timeout(isVercel ? 800 : 1500),
         headers: {
           "User-Agent": "ScrapUp/1.0 (ytgabgal@gmail.com) Node/fetch"
         }
@@ -746,7 +751,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
       try {
         const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(artistName)}&gsrlimit=1&prop=pageimages&piprop=original&format=json&origin=*`;
         const wikiResponse = await fetch(wikiUrl, {
-          signal: AbortSignal.timeout(1500),
+          signal: AbortSignal.timeout(isVercel ? 800 : 1500),
           headers: {
             "User-Agent": "ScrapUp/1.0 (ytgabgal@gmail.com) Node/fetch"
           }
@@ -772,7 +777,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
     if (!avatarUrl) {
       try {
         const deezerResponse = await fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(artistName)}`, {
-          signal: AbortSignal.timeout(1500),
+          signal: AbortSignal.timeout(isVercel ? 800 : 1500),
           headers: {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
           }
@@ -800,7 +805,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
       try {
         const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&entity=album&limit=1`;
         const itunesResponse = await fetch(itunesUrl, {
-          signal: AbortSignal.timeout(1500),
+          signal: AbortSignal.timeout(isVercel ? 800 : 1500),
           headers: {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
           }

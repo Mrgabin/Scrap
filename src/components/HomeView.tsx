@@ -312,9 +312,9 @@ export default function HomeView({
           </div>
         ) : recommendations.length > 0 ? (
           <div className="flex md:grid md:grid-cols-4 lg:grid-cols-6 overflow-x-auto md:overflow-x-visible pb-3 md:pb-0 scrollbar-none gap-4 md:gap-5 no-scrollbar snap-x" id="recommendations_shelf">
-            {recommendations.slice(0, 12).map((track) => (
+            {recommendations.slice(0, 12).map((track, index) => (
               <div 
-                key={track.id}
+                key={`recommendation-${track.id}-${index}`}
                 onClick={() => onPlayTrack(track, recommendations)}
                 className="bg-[#181818] p-3 rounded-xl hover:bg-[#282828] transition-all duration-300 cursor-pointer group border border-transparent hover:border-neutral-800 w-[145px] shrink-0 md:w-auto md:shrink snap-start"
               >
@@ -355,9 +355,9 @@ export default function HomeView({
         <div className="mb-10" id="followed_artists_home_section">
           <h3 className="text-2xl font-black text-white tracking-tight mb-4">Mes artistes suivis ❤️</h3>
           <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-none">
-            {followedArtists.map((artist) => (
+            {followedArtists.map((artist, index) => (
               <div
-                key={artist}
+                key={`followed-artist-${artist}-${index}`}
                 onClick={() => onSelectArtist(artist)}
                 className="bg-[#181818] p-4 rounded-xl hover:bg-[#282828] transition-all duration-300 cursor-pointer flex flex-col items-center text-center shrink-0 w-36 border border-transparent hover:border-neutral-800"
               >
@@ -500,9 +500,9 @@ export default function HomeView({
                 <p className="text-xs text-[#b3b3b3]">{homeFeedData.trending.description || "Inspiré par vos écoutes récentes"}</p>
               </div>
               <div className="flex md:grid md:grid-cols-4 lg:grid-cols-6 overflow-x-auto md:overflow-x-visible pb-3 md:pb-0 scrollbar-none gap-4 md:gap-5 no-scrollbar snap-x">
-                {homeFeedData.trending.tracks.slice(0, 6).map((track: Track) => (
+                {homeFeedData.trending.tracks.slice(0, 6).map((track: Track, index: number) => (
                   <div 
-                    key={track.id}
+                    key={`trending-${track.id}-${index}`}
                     onClick={() => onPlayTrack(track, homeFeedData.trending.tracks)}
                     className="bg-[#181818] p-3 rounded-xl hover:bg-[#282828] transition-all duration-300 cursor-pointer group border border-transparent hover:border-neutral-800 w-[145px] shrink-0 md:w-auto md:shrink snap-start"
                   >
@@ -538,9 +538,9 @@ export default function HomeView({
                 <p className="text-xs text-[#b3b3b3]">{homeFeedData.newReleases.description || "Nouveaux singles et albums sélectionnés pour vous"}</p>
               </div>
               <div className="flex md:grid md:grid-cols-4 lg:grid-cols-6 overflow-x-auto md:overflow-x-visible pb-3 md:pb-0 scrollbar-none gap-4 md:gap-5 no-scrollbar snap-x">
-                {homeFeedData.newReleases.tracks.slice(0, 6).map((track: Track) => (
+                {homeFeedData.newReleases.tracks.slice(0, 6).map((track: Track, index: number) => (
                   <div 
-                    key={track.id}
+                    key={`newrelease-${track.id}-${index}`}
                     onClick={() => onPlayTrack(track, homeFeedData.newReleases.tracks)}
                     className="bg-[#181818] p-3 rounded-xl hover:bg-[#282828] transition-all duration-300 cursor-pointer group border border-transparent hover:border-neutral-800 w-[145px] shrink-0 md:w-auto md:shrink snap-start"
                   >
@@ -576,9 +576,9 @@ export default function HomeView({
                 <p className="text-xs text-[#b3b3b3]">{homeFeedData.moods.description}</p>
               </div>
               <div className="flex md:grid md:grid-cols-4 lg:grid-cols-6 overflow-x-auto md:overflow-x-visible pb-3 md:pb-0 scrollbar-none gap-4 md:gap-5 no-scrollbar snap-x">
-                {homeFeedData.moods.tracks.slice(0, 6).map((track: Track) => (
+                {homeFeedData.moods.tracks.slice(0, 6).map((track: Track, index: number) => (
                   <div 
-                    key={track.id}
+                    key={`mood-${track.id}-${index}`}
                     onClick={() => onPlayTrack(track, homeFeedData.moods.tracks)}
                     className="bg-[#181818] p-3 rounded-xl hover:bg-[#282828] transition-all duration-300 cursor-pointer group border border-transparent hover:border-neutral-800 w-[145px] shrink-0 md:w-auto md:shrink snap-start"
                   >

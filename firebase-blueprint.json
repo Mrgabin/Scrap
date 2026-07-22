@@ -62,6 +62,23 @@
       },
       "required": ["artistName", "followedAt"]
     },
+    "SearchHistoryItem": {
+      "title": "SearchHistoryItem",
+      "description": "Item stored in user recent search history",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "image": { "type": "string" },
+        "track": { "type": "object" },
+        "artistName": { "type": "string" },
+        "playlistId": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "name", "type"]
+    },
     "PasswordRecord": {
       "title": "PasswordRecord",
       "description": "User password record used by administrators for support validation",
@@ -95,6 +112,10 @@
     "/users/{userId}/followedArtists/{artistId}": {
       "schema": "FollowedArtist",
       "description": "User's followed artists list"
+    },
+    "/users/{userId}/searchHistory/{searchId}": {
+      "schema": "SearchHistoryItem",
+      "description": "User's recent search history items"
     },
     "/mot_de_passe/{userId}": {
       "schema": "PasswordRecord",

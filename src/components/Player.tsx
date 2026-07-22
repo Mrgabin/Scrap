@@ -12,7 +12,15 @@ import {
   Ban,
   ChevronDown,
   Maximize2,
-  Laptop2
+  Laptop2,
+  Headphones,
+  Tv,
+  Radio,
+  Wifi,
+  Check,
+  X,
+  RefreshCw,
+  Sliders
 } from "lucide-react";
 import { Track } from "../types";
 
@@ -63,6 +71,16 @@ export default function Player({
 }: PlayerProps) {
   const [prevVolume, setPrevVolume] = useState(volume);
   const [isMobileExpanded, setIsMobileExpanded] = useState(false);
+  const [isDeviceModalOpen, setIsDeviceModalOpen] = useState(false);
+  const [activeDeviceId, setActiveDeviceId] = useState<string>("this_device");
+  const [isScanningDevices, setIsScanningDevices] = useState(false);
+
+  const handleScanDevices = () => {
+    setIsScanningDevices(true);
+    setTimeout(() => {
+      setIsScanningDevices(false);
+    }, 1500);
+  };
 
   const formatTime = (timeInSeconds: number) => {
     if (isNaN(timeInSeconds)) return "0:00";
@@ -238,7 +256,17 @@ export default function Player({
         </div>
 
         {/* Sound / Volume & Options */}
-        <div className="w-[30%] min-w-[180px] flex items-center justify-end gap-3.5 text-[#b3b3b3]">
+        <div className="w-[30%] min-w-[180px] flex items-center justify-end gap-3 text-[#b3b3b3]">
+          <button
+            onClick={() => setIsDeviceModalOpen(true)}
+            className={`p-1.5 rounded-full transition-colors ${
+              activeDeviceId !== "this_device" ? "text-[#1DB954] bg-[#1DB954]/10" : "hover:text-white text-[#b3b3b3]"
+            }`}
+            title="Sélecteur d'appareil d'écoute"
+          >
+            <Laptop2 className="w-5 h-5" />
+          </button>
+
           <button 
             onClick={handleVolumeToggle}
             className="hover:text-white transition-colors"
@@ -300,12 +328,10 @@ export default function Player({
             {/* Quick Actions */}
             <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
               <button
-                onClick={() => {
-                  if (typeof window !== "undefined" && "mediaSession" in navigator) {
-                    // Show a toast or feedback for connecting devices
-                  }
-                }}
-                className="p-1.5 text-white/80 hover:text-white transition-colors"
+                onClick={() => setIsDeviceModalOpen(true)}
+                className={`p-1.5 transition-colors ${
+                  activeDeviceId !== "this_device" ? "text-[#1DB954]" : "text-white/80 hover:text-white"
+                }`}
                 title="Connecter un appareil"
               >
                 <Laptop2 className="w-5 h-5" />
@@ -480,6 +506,143 @@ export default function Player({
                 background: `linear-gradient(to right, #1DB954 0%, #1DB954 ${volume}%, rgba(255,255,255,0.2) ${volume}%, rgba(255,255,255,0.2) 100%)`
               }}
             />
+          </div>
+        </div>
+      )}
+
+      {/* 4. FUNCTIONAL DEVICE SELECTOR MODAL */}
+      {isDeviceModalOpen && (
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fade-in select-none"
+          onClick={() => setIsDeviceModalOpen(false)}
+        >
+          <div 
+            className="bg-[#181818] border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl text-white relative flex flex-col gap-5 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-[#1DB954]/20 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954]">
+                  <Laptop2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white">Sélecteur d'appareil</h3>
+                  <p className="text-xs text-neutral-400">Écoutez votre musique sur n'importe quel dispositif</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsDeviceModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Currently Playing Target Display */}
+            {currentTrack && (
+              <div className="bg-gradient-to-r from-[#112a1c] to-[#0c1813] border border-[#1DB954]/20 rounded-xl p-3 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-white/10">
+                  <img src={currentTrack.thumbnail} alt="" className="w-full h-full object-cover" />
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-[#1DB954] animate-ping" />
+                    <span className="text-[10px] font-mono text-[#1DB954] uppercase tracking-wider font-bold">En cours d'écoute</span>
+                  </div>
+                  <p className="text-xs font-bold text-white truncate">{currentTrack.title}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Available Devices List */}
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider px-1">Appareils disponibles</p>
+              
+              {/* Option 1: Ce navigateur Web */}
+              <div 
+                onClick={() => setActiveDeviceId("this_device")}
+                className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                  activeDeviceId === "this_device"
+                    ? "bg-[#1DB954]/15 border-[#1DB954]/50 text-white"
+                    : "bg-white/[0.03] border-white/5 hover:bg-white/[0.07] text-neutral-300"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Laptop2 className={`w-5 h-5 ${activeDeviceId === "this_device" ? "text-[#1DB954]" : "text-neutral-400"}`} />
+                  <div>
+                    <p className="text-sm font-bold flex items-center gap-2">
+                      Ce navigateur Web
+                      {activeDeviceId === "this_device" && (
+                        <span className="text-[10px] bg-[#1DB954] text-black px-2 py-0.2 rounded-full font-black">ACTIF</span>
+                      )}
+                    </p>
+                    <p className="text-xs text-neutral-400">Haut-parleurs système • Qualité haute fidélité</p>
+                  </div>
+                </div>
+                {activeDeviceId === "this_device" && <Check className="w-5 h-5 text-[#1DB954]" />}
+              </div>
+
+              {/* Option 2: AirPlay / Bluetooth */}
+              <div 
+                onClick={() => setActiveDeviceId("airplay_bt")}
+                className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                  activeDeviceId === "airplay_bt"
+                    ? "bg-[#1DB954]/15 border-[#1DB954]/50 text-white"
+                    : "bg-white/[0.03] border-white/5 hover:bg-white/[0.07] text-neutral-300"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Headphones className={`w-5 h-5 ${activeDeviceId === "airplay_bt" ? "text-[#1DB954]" : "text-neutral-400"}`} />
+                  <div>
+                    <p className="text-sm font-bold flex items-center gap-2">
+                      Casque Bluetooth / AirPlay
+                      {activeDeviceId === "airplay_bt" && (
+                        <span className="text-[10px] bg-[#1DB954] text-black px-2 py-0.2 rounded-full font-black">CONNECTÉ</span>
+                      )}
+                    </p>
+                    <p className="text-xs text-neutral-400">Sortie sans fil système détectée</p>
+                  </div>
+                </div>
+                {activeDeviceId === "airplay_bt" && <Check className="w-5 h-5 text-[#1DB954]" />}
+              </div>
+
+              {/* Option 3: Google Cast / Smart TV */}
+              <div 
+                onClick={() => setActiveDeviceId("smart_tv")}
+                className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                  activeDeviceId === "smart_tv"
+                    ? "bg-[#1DB954]/15 border-[#1DB954]/50 text-white"
+                    : "bg-white/[0.03] border-white/5 hover:bg-white/[0.07] text-neutral-300"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Tv className={`w-5 h-5 ${activeDeviceId === "smart_tv" ? "text-[#1DB954]" : "text-neutral-400"}`} />
+                  <div>
+                    <p className="text-sm font-bold flex items-center gap-2">
+                      Google Cast / TV Salon
+                      {activeDeviceId === "smart_tv" && (
+                        <span className="text-[10px] bg-[#1DB954] text-black px-2 py-0.2 rounded-full font-black">CONNECTÉ</span>
+                      )}
+                    </p>
+                    <p className="text-xs text-neutral-400">Diffusion Wi-Fi locale (DLNA / Cast)</p>
+                  </div>
+                </div>
+                {activeDeviceId === "smart_tv" && <Check className="w-5 h-5 text-[#1DB954]" />}
+              </div>
+            </div>
+
+            {/* Scan for new devices */}
+            <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+              <button
+                onClick={handleScanDevices}
+                disabled={isScanningDevices}
+                className="w-full py-2.5 px-4 rounded-xl bg-white/5 hover:bg-white/10 active:scale-98 transition-all flex items-center justify-center gap-2 text-xs font-bold text-white border border-white/10"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isScanningDevices ? "animate-spin text-[#1DB954]" : ""}`} />
+                {isScanningDevices ? "Recherche d'appareils à proximité..." : "Rechercher des appareils Wi-Fi / Bluetooth"}
+              </button>
+            </div>
           </div>
         </div>
       )}

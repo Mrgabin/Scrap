@@ -51,20 +51,18 @@ export default function Sidebar({
   return (
     <nav className="w-[280px] shrink-0 flex flex-col gap-2 h-full select-none" id="spotify_sidebar">
       
-      {/* Brand Header with New Logo */}
+      {/* Brand Header with SVG Logo and 'scrap' underneath */}
       <div 
         onClick={() => setCurrentView("home")}
-        className="bg-[#0a0a14]/30 backdrop-blur-md rounded-lg p-5 flex items-center gap-3 border border-white/5 shadow-xl cursor-pointer hover:bg-white/[0.02] transition-all group"
+        className="bg-[#0a0a14]/30 backdrop-blur-md rounded-lg p-3 flex flex-col items-center justify-center gap-1 border border-white/5 shadow-xl cursor-pointer hover:bg-white/[0.02] transition-all group"
+        title="Accueil Scrap"
       >
-        <div className="w-10 h-10 group-hover:scale-105 transition-all flex items-center justify-center filter drop-shadow-[0_2px_8px_rgba(29,185,84,0.3)]">
-          <img src={scrapLogo} className="w-full h-full object-contain" alt="Scrap Logo" referrerPolicy="no-referrer" />
+        <div className="w-9 h-9 group-hover:scale-105 transition-all flex items-center justify-center filter drop-shadow-[0_2px_8px_rgba(29,185,84,0.3)]">
+          <img src="/icon.svg" className="w-full h-full object-contain" alt="Scrap Logo" referrerPolicy="no-referrer" />
         </div>
-        <div>
-          <span className="font-black text-lg tracking-tight text-white flex items-center gap-1">
-            Scrap<span className="text-[#1DB954] text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-white/10 ml-1">APP</span>
-          </span>
-          <p className="text-[10px] text-neutral-400 font-medium">Lecteur audio intelligent</p>
-        </div>
+        <span className="font-bold text-xs text-white tracking-widest lowercase leading-tight">
+          scrap
+        </span>
       </div>
 
       {/* Library, Playlists, Saved Songs */}

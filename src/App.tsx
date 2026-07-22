@@ -946,6 +946,27 @@ export default function App() {
       console.error("Personalized playlists loading failed:", err);
     });
 
+    // G. Search History listener (Firestore Database)
+    const searchHistoryQuery = query(
+      collection(db, "users", user.uid, "searchHistory"),
+      orderBy("timestamp", "desc"),
+      limit(20)
+    );
+    const unsubSearchHistory = onSnapshot(searchHistoryQuery, (snap) => {
+      const items: any[] = [];
+      snap.forEach((docSnap) => {
+        const data = docSnap.data();
+        items.push({ id: docSnap.id, ...data });
+      });
+      setSearchHistory(items);
+      const key = getSearchHistoryKey(user);
+      if (key) {
+        localStorage.setItem(key, JSON.stringify(items));
+      }
+    }, (err) => {
+      console.error("Search history Firestore listener failed:", err);
+    });
+
     return () => {
       unsubLiked();
       unsubPlaylists();
@@ -953,6 +974,7 @@ export default function App() {
       unsubFollowed();
       unsubUserDoc();
       unsubPersonalized();
+      unsubSearchHistory();
     };
   }, [user]);
 
@@ -1314,7 +1336,7 @@ export default function App() {
     };
   }, []);
 
-  const addToSearchHistory = (item: {
+  const addToSearchHistory = async (item: {
     id: string;
     name: string;
     type: string;
@@ -1324,6 +1346,7 @@ export default function App() {
     artistName?: string;
     playlistId?: string;
   }) => {
+    // 1. Optimistic UI update
     setSearchHistory((prevHistory) => {
       const filtered = prevHistory.filter((h) => h.id !== item.id && h.name !== item.name);
       const updated = [item, ...filtered].slice(0, 15);
@@ -1333,9 +1356,34 @@ export default function App() {
       }
       return updated;
     });
+
+    // 2. Persist to Firestore database for authenticated non-guest users
+    if (user && !user.isGuest) {
+      try {
+        const safeDocId = (item.id || item.name || `search_${Date.now()}`)
+          .replace(/[\/\\#?%]/g, "_")
+          .substring(0, 100);
+        const docRef = doc(db, "users", user.uid, "searchHistory", safeDocId);
+        const payload: any = {
+          id: safeDocId,
+          name: item.name || "",
+          type: item.type || "Inconnu",
+          subtitle: item.subtitle || "",
+          image: item.image || "",
+          timestamp: new Date().toISOString()
+        };
+        if (item.track) payload.track = item.track;
+        if (item.artistName) payload.artistName = item.artistName;
+        if (item.playlistId) payload.playlistId = item.playlistId;
+
+        await setDoc(docRef, payload, { merge: true });
+      } catch (err: any) {
+        console.error("Error saving search history item to Firestore:", err);
+      }
+    }
   };
 
-  const handleRemoveFromHistory = (id: string) => {
+  const handleRemoveFromHistory = async (id: string) => {
     setSearchHistory((prevHistory) => {
       const updated = prevHistory.filter((h) => h.id !== id);
       const key = getSearchHistoryKey(user);
@@ -1344,13 +1392,34 @@ export default function App() {
       }
       return updated;
     });
+
+    if (user && !user.isGuest) {
+      try {
+        const safeDocId = id.replace(/[\/\\#?%]/g, "_").substring(0, 100);
+        const docRef = doc(db, "users", user.uid, "searchHistory", safeDocId);
+        await deleteDoc(docRef);
+      } catch (err: any) {
+        console.error("Error deleting search history item from Firestore:", err);
+      }
+    }
   };
 
-  const handleClearHistory = () => {
+  const handleClearHistory = async () => {
     setSearchHistory([]);
     const key = getSearchHistoryKey(user);
     if (key) {
       localStorage.setItem(key, JSON.stringify([]));
+    }
+
+    if (user && !user.isGuest) {
+      try {
+        const historyColRef = collection(db, "users", user.uid, "searchHistory");
+        const snap = await getDocs(historyColRef);
+        const deletePromises = snap.docs.map((docSnap) => deleteDoc(docSnap.ref));
+        await Promise.all(deletePromises);
+      } catch (err: any) {
+        console.error("Error clearing search history from Firestore:", err);
+      }
     }
   };
 
@@ -2539,9 +2608,14 @@ export default function App() {
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
-              <span className="md:hidden font-black text-xs text-white tracking-tight flex items-center gap-1">
-                Scrap<span className="text-[#1DB954] text-[8px] font-mono font-bold px-1 rounded bg-white/10">APP</span>
-              </span>
+              <div 
+                onClick={() => setCurrentView("home")}
+                className="md:hidden flex flex-col items-center cursor-pointer hover:opacity-90 transition-opacity"
+                title="Accueil Scrap"
+              >
+                <img src="/icon.svg" className="w-6 h-6 object-contain" alt="Scrap Logo" referrerPolicy="no-referrer" />
+                <span className="text-[9px] font-bold text-white tracking-widest lowercase leading-tight -mt-0.5">scrap</span>
+              </div>
             </div>
 
             {/* Middle Section: Home button + Pill Search bar */}
@@ -2572,21 +2646,33 @@ export default function App() {
                   onChange={(e) => {
                     const val = e.target.value;
                     setSearchQuery(val);
-                    if (currentView !== "search") {
+                    if (val.trim() && currentView !== "search") {
                       setCurrentView("search");
                     }
                     executeSearch(val);
                   }}
                   onFocus={() => {
-                    if (currentView !== "search") {
-                      setCurrentView("search");
-                    }
                     setIsSearchHistoryOpen(true);
                     setShowSearchInfo(false);
                   }}
                   onClick={() => {
                     setIsSearchHistoryOpen(true);
                     setShowSearchInfo(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && searchQuery.trim()) {
+                      if (currentView !== "search") {
+                        setCurrentView("search");
+                      }
+                      addToSearchHistory({
+                        id: `query_${searchQuery.trim().toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
+                        name: searchQuery.trim(),
+                        type: "Recherche",
+                        subtitle: "Recherche texte",
+                        image: ""
+                      });
+                      setIsSearchHistoryOpen(false);
+                    }
                   }}
                   className="w-full bg-transparent text-sm text-white placeholder-neutral-400 outline-none"
                 />

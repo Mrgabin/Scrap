@@ -191,21 +191,9 @@ export default function HomeView({
   return (
     <div className="p-3 sm:p-6 pb-36 md:pb-28 overflow-y-auto h-full text-white" id="home_view">
       
-      {/* 0. Mobile-only Header Row with avatar and filter chips */}
+      {/* 0. Mobile-only Header Row with filter chips */}
       <div className="md:hidden flex items-center justify-between mb-4 select-none" id="mobile_header_row">
         <div className="flex items-center gap-2 overflow-x-auto py-1 flex-1 pr-2 no-scrollbar scrollbar-none">
-          {/* User profile image */}
-          <div 
-            onClick={() => onSelectView?.("settings")}
-            className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-[#2a2a2a] to-black shrink-0 cursor-pointer border border-white/10 flex items-center justify-center text-[11px] font-black uppercase text-[#1DB954] mr-1"
-          >
-            {user?.photoURL ? (
-              <img referrerPolicy="no-referrer" src={user.photoURL} alt="Profil" className="w-full h-full object-cover" />
-            ) : (
-              (user?.displayName ? user.displayName.slice(0, 2) : "AC")
-            )}
-          </div>
-
           {/* Scrolling filter pills */}
           <button 
             onClick={() => setActiveFilter("Tout")}

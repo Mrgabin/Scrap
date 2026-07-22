@@ -5,7 +5,20 @@ export async function fetchArtistAvatarClient(artistName: string): Promise<strin
   if (!normalized) return null;
 
   try {
-    // 1. Try French Wikipedia first (great for local French artists like Damso, Luther, Specy Men)
+    // 1. Prioritize our dedicated backend endpoint which scrapes YouTube Music & queries Deezer/Wikipedia without CORS
+    const response = await fetch(`/api/artist-avatar?name=${encodeURIComponent(normalized)}`);
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.avatarUrl && !data.avatarUrl.includes("unsplash.com")) {
+        return data.avatarUrl;
+      }
+    }
+  } catch (error) {
+    console.warn("Error fetching artist avatar from server, falling back to client scrapers:", error);
+  }
+
+  try {
+    // 2. Client-side Fallback: Try French Wikipedia pageimages
     const frUrl = `https://fr.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(normalized)}&gsrlimit=1&prop=pageimages&piprop=original&format=json&origin=*`;
     const frRes = await fetch(frUrl);
     if (frRes.ok) {
@@ -20,7 +33,7 @@ export async function fetchArtistAvatarClient(artistName: string): Promise<strin
       }
     }
 
-    // 2. Try English Wikipedia (great for international artists like Michael Jackson, The Weeknd)
+    // 3. Client-side Fallback: Try English Wikipedia pageimages
     const enUrl = `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(normalized)}&gsrlimit=1&prop=pageimages&piprop=original&format=json&origin=*`;
     const enRes = await fetch(enUrl);
     if (enRes.ok) {
@@ -34,22 +47,8 @@ export async function fetchArtistAvatarClient(artistName: string): Promise<strin
         }
       }
     }
-
-    // 3. Try iTunes Search API as a high-quality official music fallback (album artwork)
-    const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(normalized)}&entity=album&limit=1`;
-    const itunesRes = await fetch(itunesUrl);
-    if (itunesRes.ok) {
-      const data = await itunesRes.json();
-      if (data.results && data.results.length > 0) {
-        const artwork = data.results[0].artworkUrl100;
-        if (artwork) {
-          // Upgrade to high-resolution
-          return artwork.replace("100x100bb.jpg", "600x600bb.jpg");
-        }
-      }
-    }
   } catch (error) {
-    console.warn("Error in client-side artist photo fetch:", error);
+    console.warn("Error in client-side fallback artist photo fetch:", error);
   }
 
   return null;

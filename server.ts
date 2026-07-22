@@ -453,6 +453,179 @@ function getDeterministicStats(artistName: string) {
   };
 }
 
+// Dedicated helper to resolve extremely high-quality artist avatars
+async function resolveArtistAvatarServer(artistName: string): Promise<string> {
+  const normalized = artistName.toLowerCase().trim();
+  const isVercel = !!process.env.VERCEL;
+
+  // 1. Try Deezer Search Artist API (super reliable, official high-res headshot!)
+  try {
+    const deezerResponse = await fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(artistName)}`, {
+      signal: AbortSignal.timeout(isVercel ? 1000 : 2500),
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      }
+    });
+    if (deezerResponse.ok) {
+      const deezerData = await deezerResponse.json();
+      if (deezerData && deezerData.data && deezerData.data.length > 0) {
+        // Find best match or default to first
+        const match = deezerData.data.find(
+          (a: any) => a.name.toLowerCase().trim() === normalized
+        ) || deezerData.data.find(
+          (a: any) => a.name.toLowerCase().includes(normalized) || normalized.includes(a.name.toLowerCase())
+        ) || deezerData.data[0];
+
+        if (match) {
+          const avatarUrl = match.picture_xl || match.picture_big || match.picture_medium || match.picture || "";
+          if (avatarUrl) {
+            console.log(`[resolveArtistAvatarServer - Deezer] Found official high-res avatar for ${artistName}: ${avatarUrl}`);
+            return avatarUrl;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`[resolveArtistAvatarServer - Deezer Error] for ${artistName}:`, err);
+  }
+
+  // 2. Try YouTube Music Search (scrapes music.youtube.com for the artist card thumbnail)
+  try {
+    const ytMusicUrl = `https://music.youtube.com/search?q=${encodeURIComponent(artistName)}`;
+    const response = await fetch(ytMusicUrl, {
+      signal: AbortSignal.timeout(isVercel ? 1200 : 3000),
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Cache-Control": "no-cache"
+      }
+    });
+    if (response.ok) {
+      const html = await response.text();
+      const data = extractYtInitialData(html);
+      if (data) {
+        const thumbnails: string[] = [];
+        const findThumbnails = (obj: any) => {
+          if (!obj || typeof obj !== "object") return;
+          if (obj.musicArtistRenderer || obj.artistRenderer) {
+            const renderer = obj.musicArtistRenderer || obj.artistRenderer;
+            const thumbs = renderer.thumbnail?.thumbnails || renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails;
+            if (thumbs && thumbs.length > 0) {
+              const sorted = thumbs.sort((a: any, b: any) => (b.width || 0) - (a.width || 0));
+              if (sorted[0]?.url) thumbnails.push(sorted[0].url);
+            }
+          } else {
+            for (const key of Object.keys(obj)) {
+              findThumbnails(obj[key]);
+            }
+          }
+        };
+        findThumbnails(data);
+        if (thumbnails.length > 0) {
+          let avatarUrl = thumbnails[0];
+          if (avatarUrl.startsWith("//")) avatarUrl = "https:" + avatarUrl;
+          avatarUrl = avatarUrl.replace(/=s\d+-[^]+$/, "=s512-c-k-c0x00ffffff-no-rj")
+                               .replace(/\/s\d+-c/, "/s512-c")
+                               .replace(/=s\d+/, "=s512");
+          console.log(`[resolveArtistAvatarServer - YT Music Scraper] Found official high-res avatar for ${artistName}: ${avatarUrl}`);
+          return avatarUrl;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`[resolveArtistAvatarServer - YT Music Scraper Error] for ${artistName}:`, err);
+  }
+
+  // 3. Try French Wikipedia Pageimages API
+  try {
+    const wikiUrl = `https://fr.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(artistName)}&gsrlimit=1&prop=pageimages&piprop=original&format=json&origin=*`;
+    const wikiRes = await fetch(wikiUrl, {
+      signal: AbortSignal.timeout(isVercel ? 800 : 1500),
+      headers: { "User-Agent": "ScrapUp/1.0 (ytgabgal@gmail.com) Node/fetch" }
+    });
+    if (wikiRes.ok) {
+      const wikiData = await wikiRes.json();
+      const pages = wikiData?.query?.pages;
+      if (pages) {
+        const pageId = Object.keys(pages)[0];
+        const img = pages[pageId]?.original?.source;
+        if (img) {
+          console.log(`[resolveArtistAvatarServer - Wikipedia fr] Found for ${artistName}: ${img}`);
+          return img;
+        }
+      }
+    }
+  } catch (err) {
+    // ignore
+  }
+
+  // 4. Try English Wikipedia Pageimages API
+  try {
+    const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(artistName)}&gsrlimit=1&prop=pageimages&piprop=original&format=json&origin=*`;
+    const wikiRes = await fetch(wikiUrl, {
+      signal: AbortSignal.timeout(isVercel ? 800 : 1500),
+      headers: { "User-Agent": "ScrapUp/1.0 (ytgabgal@gmail.com) Node/fetch" }
+    });
+    if (wikiRes.ok) {
+      const wikiData = await wikiRes.json();
+      const pages = wikiData?.query?.pages;
+      if (pages) {
+        const pageId = Object.keys(pages)[0];
+        const img = pages[pageId]?.original?.source;
+        if (img) {
+          console.log(`[resolveArtistAvatarServer - Wikipedia en] Found for ${artistName}: ${img}`);
+          return img;
+        }
+      }
+    }
+  } catch (err) {
+    // ignore
+  }
+
+  // 5. Try iTunes Search API
+  try {
+    const albumUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&entity=album&limit=1`;
+    const albumRes = await fetch(albumUrl);
+    if (albumRes.ok) {
+      const albumData = await albumRes.json();
+      if (albumData.results && albumData.results.length > 0) {
+        const artwork = albumData.results[0].artworkUrl100;
+        if (artwork) {
+          const hdArtwork = artwork.replace("100x100bb.jpg", "600x600bb.jpg");
+          console.log(`[resolveArtistAvatarServer - iTunes album fallback] Found for ${artistName}: ${hdArtwork}`);
+          return hdArtwork;
+        }
+      }
+    }
+  } catch (err) {
+    // ignore
+  }
+
+  // 6. Return deterministic Unsplash portrait as a fallback
+  const defaultAvatars = [
+    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1552058544-f2b08422138a?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?auto=format&fit=crop&w=300&q=80"
+  ];
+  let hash = 0;
+  for (let i = 0; i < normalized.length; i++) {
+    hash = normalized.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return defaultAvatars[Math.abs(hash) % defaultAvatars.length];
+}
+
 // Helper: Fetch real artist profile avatar, official banner, subscribers, and bio
 async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
   const normalized = artistName.toLowerCase().trim();
@@ -721,109 +894,7 @@ async function fetchArtistProfileFromYt(artistName: string): Promise<any> {
 
   // --- 2. FALLBACKS (ONLY IF YOUTUBE SCRAPER RETURNED NOTHING) ---
   if (!avatarUrl) {
-    // 1. Try to fetch from French Wikipedia
-    try {
-      const wikiUrl = `https://fr.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(artistName)}&gsrlimit=1&prop=pageimages&piprop=original&format=json&origin=*`;
-      const wikiResponse = await fetch(wikiUrl, {
-        signal: AbortSignal.timeout(isVercel ? 800 : 1500),
-        headers: {
-          "User-Agent": "ScrapUp/1.0 (ytgabgal@gmail.com) Node/fetch"
-        }
-      });
-      if (wikiResponse.ok) {
-        const wikiData = await wikiResponse.json();
-        const pages = wikiData?.query?.pages;
-        if (pages) {
-          const pageId = Object.keys(pages)[0];
-          const originalImg = pages[pageId]?.original?.source;
-          if (originalImg) {
-            avatarUrl = originalImg;
-            console.log(`[Wikipedia API fr Fallback] Found avatarUrl for ${artistName}: ${avatarUrl}`);
-          }
-        }
-      }
-    } catch (err: any) {
-      console.log(`[Wikipedia API fr Fallback info] Could not fetch artist profile for ${artistName}:`, err?.message || err);
-    }
-
-    // 2. Try English Wikipedia
-    if (!avatarUrl) {
-      try {
-        const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(artistName)}&gsrlimit=1&prop=pageimages&piprop=original&format=json&origin=*`;
-        const wikiResponse = await fetch(wikiUrl, {
-          signal: AbortSignal.timeout(isVercel ? 800 : 1500),
-          headers: {
-            "User-Agent": "ScrapUp/1.0 (ytgabgal@gmail.com) Node/fetch"
-          }
-        });
-        if (wikiResponse.ok) {
-          const wikiData = await wikiResponse.json();
-          const pages = wikiData?.query?.pages;
-          if (pages) {
-            const pageId = Object.keys(pages)[0];
-            const originalImg = pages[pageId]?.original?.source;
-            if (originalImg) {
-              avatarUrl = originalImg;
-              console.log(`[Wikipedia API en Fallback] Found avatarUrl for ${artistName}: ${avatarUrl}`);
-            }
-          }
-        }
-      } catch (err: any) {
-        console.log(`[Wikipedia API en Fallback info] Could not fetch artist profile for ${artistName}:`, err?.message || err);
-      }
-    }
-
-    // 3. Try Deezer API
-    if (!avatarUrl) {
-      try {
-        const deezerResponse = await fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(artistName)}`, {
-          signal: AbortSignal.timeout(isVercel ? 800 : 1500),
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-          }
-        });
-        const deezerData = await deezerResponse.json();
-        if (deezerData && deezerData.data && deezerData.data.length > 0) {
-          const match = deezerData.data.find(
-            (a: any) => a.name.toLowerCase().trim() === artistName.toLowerCase().trim()
-          ) || deezerData.data[0];
-          
-          if (match) {
-            avatarUrl = match.picture_xl || match.picture_big || match.picture_medium || match.picture || "";
-            if (avatarUrl) {
-              console.log(`[Deezer API Fallback] Found official avatarUrl for ${artistName}: ${avatarUrl}`);
-            }
-          }
-        }
-      } catch (deezerError: any) {
-        console.log(`[Deezer API Fallback info] Could not fetch artist profile for ${artistName}:`, deezerError?.message || deezerError);
-      }
-    }
-
-    // 4. Try iTunes Search API
-    if (!avatarUrl) {
-      try {
-        const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&entity=album&limit=1`;
-        const itunesResponse = await fetch(itunesUrl, {
-          signal: AbortSignal.timeout(isVercel ? 800 : 1500),
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-          }
-        });
-        if (itunesResponse.ok) {
-          const itunesData = await itunesResponse.json();
-          if (itunesData.results && itunesData.results.length > 0) {
-            const artwork = itunesData.results[0].artworkUrl100;
-            if (artwork) {
-              avatarUrl = artwork.replace("100x100bb.jpg", "600x600bb.jpg");
-              console.log(`[iTunes API Fallback] Found official release artwork for ${artistName}: ${avatarUrl}`);
-            }
-          }
-        }
-      } catch (itunesError: any) {
-        console.log(`[iTunes API Fallback info] Could not fetch artist profile for ${artistName}:`, itunesError?.message || itunesError);
-      }
-    }
+    avatarUrl = await resolveArtistAvatarServer(artistName);
   }
 
   // Ensure full protocol URL
@@ -1125,6 +1196,38 @@ app.get("/api/artist-profile", async (req, res) => {
     res.status(500).json({ error: "Failed to generate artist profile" });
   } finally {
     delete activeProfileFetches[cacheKey];
+  }
+});
+
+// Cache for artist avatars to make it extremely fast and prevent repetitive external API/scraping requests
+const artistAvatarCache: Record<string, { url: string; timestamp: number }> = {};
+const AVATAR_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+
+app.get("/api/artist-avatar", async (req, res) => {
+  const name = req.query.name as string;
+  if (!name) {
+    return res.status(400).json({ error: "Missing query parameter 'name'" });
+  }
+
+  const cacheKey = name.toLowerCase().trim();
+  const now = Date.now();
+
+  // Check cache first
+  if (artistAvatarCache[cacheKey] && (now - artistAvatarCache[cacheKey].timestamp) < AVATAR_CACHE_DURATION) {
+    return res.json({ avatarUrl: artistAvatarCache[cacheKey].url });
+  }
+
+  try {
+    const avatarUrl = await resolveArtistAvatarServer(name);
+    artistAvatarCache[cacheKey] = {
+      url: avatarUrl,
+      timestamp: now
+    };
+    return res.json({ avatarUrl });
+  } catch (error) {
+    console.error("Error in /api/artist-avatar:", error);
+    const fallback = `https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?auto=format&fit=crop&w=300&q=80`;
+    return res.json({ avatarUrl: fallback });
   }
 });
 

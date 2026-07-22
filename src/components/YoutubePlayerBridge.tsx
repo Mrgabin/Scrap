@@ -13,6 +13,7 @@ interface YoutubePlayerBridgeProps {
   onTrackReady: (durationSec: number) => void;
   initialStartTime: number;
   playTrigger: number;
+  onPlayStateChange?: (isPlaying: boolean) => void;
 }
 
 declare global {
@@ -32,9 +33,11 @@ export default function YoutubePlayerBridge({
   onTrackEnd,
   onTrackReady,
   initialStartTime,
-  playTrigger
+  playTrigger,
+  onPlayStateChange
 }: YoutubePlayerBridgeProps) {
   const playerRef = useRef<any>(null);
+  const silentAudioRef = useRef<HTMLAudioElement | null>(null);
   const containerId = "yt-hidden-player-iframe";
   const timerRef = useRef<any>(null);
   const isReadyRef = useRef<boolean>(false);
@@ -205,6 +208,7 @@ export default function YoutubePlayerBridge({
             if (event.data === 0) {
               stopTimer();
               onTrackEnd();
+              onPlayStateChange?.(false);
             } else if (event.data === 1) { // PLAYING = 1
               hasStartedPlayingRef.current = true;
               startTimer();
@@ -212,6 +216,10 @@ export default function YoutubePlayerBridge({
               if (duration > 0) {
                 onTrackReady(duration);
               }
+              onPlayStateChange?.(true);
+            } else if (event.data === 2) { // PAUSED = 2
+              stopTimer();
+              onPlayStateChange?.(false);
             } else if (event.data === -1) { // UNSTARTED = -1
               if (isPlaying) {
                 forcePlay(event.target);
@@ -312,8 +320,18 @@ export default function YoutubePlayerBridge({
     }
   }, [playTrigger]);
 
-  // Sync Play / Pause state
+  // Sync Play / Pause state & background mobile audio thread
   useEffect(() => {
+    if (isPlaying) {
+      if (silentAudioRef.current) {
+        silentAudioRef.current.play().catch(() => {});
+      }
+    } else {
+      if (silentAudioRef.current) {
+        silentAudioRef.current.pause();
+      }
+    }
+
     if (!isReadyRef.current || !playerRef.current || !playerRef.current.playVideo) return;
 
     if (currentTrack) {
@@ -484,6 +502,15 @@ export default function YoutubePlayerBridge({
           </p>
         </div>
       )}
+
+      {/* Silent audio element to maintain background audio session on mobile lock screen */}
+      <audio 
+        ref={silentAudioRef}
+        src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA="
+        loop
+        playsInline
+        className="hidden"
+      />
 
       {/* Video Iframe Container (Always mounted in viewport so browser doesn't throttle) */}
       <div 

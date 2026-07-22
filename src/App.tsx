@@ -3205,6 +3205,11 @@ export default function App() {
         onTrackEnd={handleNextTrack}
         initialStartTime={initialStartTime}
         playTrigger={playTrigger}
+        onPlayStateChange={(playing) => {
+          if (!spotifyConnect.isRemoteControlMode) {
+            setIsPlaying(playing);
+          }
+        }}
       />
 
       {/* Bottom Sticky Spotify Media Player Controller */}

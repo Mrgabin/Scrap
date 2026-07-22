@@ -218,19 +218,18 @@ export default function Sidebar({
           </a>
           
           {/* Discord button */}
-          <button
-            type="button"
+          <a
+            href="https://discord.gg/pJj6FAVnEy"
+            target="_blank"
+            rel="noopener noreferrer"
             className="flex-1 py-2 px-3 rounded-md bg-[#5865F2]/10 hover:bg-[#5865F2]/20 text-[#5865F2] text-xs font-semibold flex items-center justify-center gap-1.5 transition-all border border-[#5865F2]/20 hover:border-[#5865F2]/40 cursor-pointer"
             id="sidebar_discord_btn"
-            onClick={() => {
-              alert("Le serveur Discord Scrap arrive très bientôt ! Restez connectés.");
-            }}
           >
             <svg className="w-4 h-4 fill-current" viewBox="0 0 127.14 96.36" xmlns="http://www.w3.org/2000/svg">
               <path d="M107.7,8.07A105.15,105.15,0,0,0,77.26,0a77.19,77.19,0,0,0-3.3,6.83A96.67,96.67,0,0,0,53.18,6.83,77.19,77.19,0,0,0,49.88,0,105.15,105.15,0,0,0,19.44,8.07C3.66,31.58-1.86,54.65,1,77.53A105.73,105.73,0,0,0,32,96.36a77.7,77.7,0,0,0,6.63-10.85,68.43,68.43,0,0,1-10.5-5c.88-.65,1.72-1.34,2.51-2a75.58,75.58,0,0,0,73,0c.79.71,1.63,1.4,2.51,2a68.43,68.43,0,0,1-10.5,5,77.7,77.7,0,0,0,6.63,10.85,105.73,105.73,0,0,0,31.06-18.83C129.87,48.12,122.94,25.35,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5.14-12.69,11.41-12.69S53.9,46,53.8,53,48.72,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.24,60,73.24,53s5.14-12.69,11.41-12.69S96.13,46,96,53,91,65.69,84.69,65.69Z"/>
             </svg>
             Discord
-          </button>
+          </a>
         </div>
       </div>
     </nav>

@@ -33,6 +33,7 @@ import ArtistView from "./components/ArtistView";
 import LibraryView from "./components/LibraryView";
 import MobileNav from "./components/MobileNav";
 import { useIsMobile } from "./lib/useIsMobile";
+import { useSpotifyConnect } from "./hooks/useSpotifyConnect";
 import TasteSurveyModal from "./components/TasteSurveyModal";
 import SpotifyImportModal from "./components/SpotifyImportModal";
 import BlackHoleBackground from "./components/BlackHoleBackground";
@@ -1228,6 +1229,10 @@ export default function App() {
 
   // 6. Playback operations
   const handlePlayTrack = async (track: Track, contextList: Track[] = []) => {
+    if (spotifyConnect?.isRemoteControlMode) {
+      spotifyConnect.sendRemoteCommand("playTrack", { track });
+      return;
+    }
     setInitialStartTime(0);
     setCurrentTime(0);
     setSeekTo(0);
@@ -1460,12 +1465,20 @@ export default function App() {
   };
 
   const handlePlayPauseToggle = () => {
+    if (spotifyConnect?.isRemoteControlMode) {
+      spotifyConnect.sendRemoteCommand(displayIsPlaying ? "pause" : "play");
+      return;
+    }
     if (currentTrack) {
       setIsPlaying(!isPlaying);
     }
   };
 
   const handleNextTrack = () => {
+    if (spotifyConnect?.isRemoteControlMode) {
+      spotifyConnect.sendRemoteCommand("next");
+      return;
+    }
     // Register negative signal if a recommended track is skipped within 30 seconds
     if (currentTrack && currentTrack.isRecommendation && currentTime < 30) {
       setSmartShuffleDislikes(prev => {
@@ -1663,6 +1676,10 @@ export default function App() {
   };
 
   const handlePrevTrack = () => {
+    if (spotifyConnect?.isRemoteControlMode) {
+      spotifyConnect.sendRemoteCommand("previous");
+      return;
+    }
     if (currentTime > 2) {
       setInitialStartTime(0);
       setCurrentTime(0);
@@ -1715,9 +1732,54 @@ export default function App() {
   };
 
   const handleSeek = (seconds: number) => {
+    if (spotifyConnect?.isRemoteControlMode) {
+      spotifyConnect.sendRemoteCommand("seek", { positionSec: seconds });
+      return;
+    }
     setSeekTo(seconds);
     setCurrentTime(seconds);
   };
+
+  // Spotify Connect Multi-Device Realtime Sync Engine
+  const spotifyConnect = useSpotifyConnect({
+    user,
+    currentTrack,
+    isPlaying,
+    currentTime,
+    duration,
+    volume,
+    setCurrentTrack,
+    setIsPlaying,
+    onSeek: (seconds) => {
+      setSeekTo(seconds);
+      setCurrentTime(seconds);
+    },
+    setVolume,
+    onNextTrack: () => handleNextTrack(),
+    onPrevTrack: () => handlePrevTrack(),
+    playTrack: (track) => handlePlayTrack(track)
+  });
+
+  // Calculate derived playback states for active display (handling remote control mode)
+  const displayTrack = spotifyConnect.isRemoteControlMode 
+    ? (spotifyConnect.remotePlayback?.currentTrack || currentTrack)
+    : currentTrack;
+
+  const displayIsPlaying = spotifyConnect.isRemoteControlMode
+    ? (spotifyConnect.remotePlayback?.isPlaying ?? isPlaying)
+    : isPlaying;
+
+  const displayCurrentTime = spotifyConnect.isRemoteControlMode
+    ? (spotifyConnect.remotePlayback ? (spotifyConnect.remotePlayback.progressMs / 1000 + (spotifyConnect.remotePlayback.isPlaying ? (Date.now() - spotifyConnect.remotePlayback.updatedAt) / 1000 : 0)) : currentTime)
+    : currentTime;
+
+  const displayDuration = spotifyConnect.isRemoteControlMode
+    ? (spotifyConnect.remotePlayback ? (spotifyConnect.remotePlayback.durationMs / 1000) : duration)
+    : duration;
+
+  const displayVolume = spotifyConnect.isRemoteControlMode
+    ? (spotifyConnect.remotePlayback?.volume ?? volume)
+    : volume;
 
   // Create stable references for event handlers to prevent continuous MediaSession teardown/re-registration
   const handleNextTrackRef = useRef(handleNextTrack);
@@ -3114,8 +3176,8 @@ export default function App() {
                 artistName={selectedArtistName}
                 onPlayTrack={handlePlayTrack}
                 onSelectArtist={handleSelectArtist}
-                currentTrack={currentTrack}
-                isPlaying={isPlaying}
+                currentTrack={displayTrack}
+                isPlaying={displayIsPlaying}
                 onPlayPauseToggle={handlePlayPauseToggle}
                 followedArtists={followedArtists}
                 onToggleFollowArtist={handleToggleFollowArtist}
@@ -3128,8 +3190,8 @@ export default function App() {
 
       {/* Embedded headless YouTube streaming bridge */}
       <YoutubePlayerBridge 
-        currentTrack={currentTrack}
-        isPlaying={isPlaying}
+        currentTrack={spotifyConnect.isRemoteControlMode ? null : currentTrack}
+        isPlaying={spotifyConnect.isRemoteControlMode ? false : isPlaying}
         volume={volume}
         seekTo={seekTo}
         onSeekComplete={() => setSeekTo(null)}
@@ -3147,24 +3209,31 @@ export default function App() {
 
       {/* Bottom Sticky Spotify Media Player Controller */}
       <Player 
-        currentTrack={currentTrack}
-        isPlaying={isPlaying}
+        currentTrack={displayTrack}
+        isPlaying={displayIsPlaying}
         onPlayPauseToggle={handlePlayPauseToggle}
         onNextTrack={handleNextTrack}
         onPrevTrack={handlePrevTrack}
-        currentTime={currentTime}
-        duration={duration}
+        currentTime={displayCurrentTime}
+        duration={displayDuration}
         onSeek={handleSeek}
-        volume={volume}
-        setVolume={setVolume}
-        isLiked={currentTrack ? likedTracks.some(t => t.id === currentTrack.id) : false}
+        volume={displayVolume}
+        setVolume={(vol) => {
+          if (spotifyConnect.isRemoteControlMode) {
+            spotifyConnect.sendRemoteCommand("setVolume", { volume: vol });
+          } else {
+            setVolume(vol);
+          }
+        }}
+        isLiked={displayTrack ? likedTracks.some(t => t.id === displayTrack.id) : false}
         onLikeToggle={handleLikeToggle}
         onSelectArtist={handleSelectArtist}
         shuffleMode={shuffleMode}
         onShuffleToggle={handleShuffleToggle}
         isLikedSongsContext={currentView === "liked-songs" || activePlaybackContext === "liked"}
-        isRecommendation={currentTrack?.isRecommendation || false}
+        isRecommendation={displayTrack?.isRecommendation || false}
         onDislikeRecommendation={handleDislikeRecommendation}
+        spotifyConnect={spotifyConnect}
       />
 
       {/* Mobile Bottom Navigation Bar (< md) */}

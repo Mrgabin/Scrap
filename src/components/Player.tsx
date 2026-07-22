@@ -4,25 +4,40 @@ import {
   Pause, 
   SkipBack, 
   SkipForward, 
+  Shuffle, 
+  Repeat, 
+  Heart, 
   Volume2, 
   VolumeX, 
-  Heart, 
-  Shuffle,
   Sparkles,
   Ban,
-  ChevronDown,
-  Maximize2,
   Laptop2,
-  Headphones,
+  Smartphone,
   Tv,
-  Radio,
-  Wifi,
+  Headphones,
   Check,
   X,
   RefreshCw,
-  Sliders
+  Edit2
 } from "lucide-react";
 import { Track } from "../types";
+
+export interface SpotifyConnectProps {
+  thisDeviceId: string;
+  deviceName: string;
+  deviceType: string;
+  updateDeviceName: (name: string) => void;
+  onlineDevices: any[];
+  activeDeviceId: string;
+  activeDeviceName: string;
+  activeDeviceType: string;
+  isThisDeviceActive: boolean;
+  isRemoteControlMode: boolean;
+  remotePlayback: any;
+  sendRemoteCommand: (type: string, payload?: any) => void;
+  transferPlaybackToThisDevice: () => void;
+  setActiveDeviceId: (id: string) => void;
+}
 
 interface PlayerProps {
   currentTrack: Track | null;
@@ -47,6 +62,9 @@ interface PlayerProps {
   // Smart Shuffle Recommendation attributes
   isRecommendation?: boolean;
   onDislikeRecommendation?: () => void;
+
+  // Spotify Connect Integration
+  spotifyConnect?: SpotifyConnectProps;
 }
 
 export default function Player({
@@ -67,19 +85,32 @@ export default function Player({
   onShuffleToggle,
   isLikedSongsContext = false,
   isRecommendation = false,
-  onDislikeRecommendation
+  onDislikeRecommendation,
+  spotifyConnect
 }: PlayerProps) {
   const [prevVolume, setPrevVolume] = useState(volume);
   const [isMobileExpanded, setIsMobileExpanded] = useState(false);
   const [isDeviceModalOpen, setIsDeviceModalOpen] = useState(false);
-  const [activeDeviceId, setActiveDeviceId] = useState<string>("this_device");
   const [isScanningDevices, setIsScanningDevices] = useState(false);
+  const [isEditingDeviceName, setIsEditingDeviceName] = useState(false);
+  const [editedDeviceName, setEditedDeviceName] = useState("");
+
+  const activeDeviceId = spotifyConnect ? spotifyConnect.activeDeviceId : "this_device";
+  const isRemoteControl = spotifyConnect ? spotifyConnect.isRemoteControlMode : false;
+  const activeDeviceName = spotifyConnect ? spotifyConnect.activeDeviceName : "Ce navigateur Web";
 
   const handleScanDevices = () => {
     setIsScanningDevices(true);
     setTimeout(() => {
       setIsScanningDevices(false);
     }, 1500);
+  };
+
+  const handleSaveDeviceName = () => {
+    if (editedDeviceName.trim() && spotifyConnect) {
+      spotifyConnect.updateDeviceName(editedDeviceName.trim());
+    }
+    setIsEditingDeviceName(false);
   };
 
   const formatTime = (timeInSeconds: number) => {
@@ -105,6 +136,22 @@ export default function Player({
 
   // Safe percentage calculation for styling the track slider progress
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  const renderDeviceIcon = (type: string, className: string = "w-5 h-5") => {
+    switch (type) {
+      case "mobile":
+        return <Smartphone className={className} />;
+      case "tv":
+        return <Tv className={className} />;
+      case "speaker":
+        return <Volume2 className={className} />;
+      case "headphone":
+      case "airplay_bt":
+        return <Headphones className={className} />;
+      default:
+        return <Laptop2 className={className} />;
+    }
+  };
 
   return (
     <>
@@ -172,35 +219,41 @@ export default function Player({
           )}
         </div>
 
-        {/* Playback Control Center */}
-        <div className="flex-1 flex flex-col items-center gap-2 max-w-[600px]">
-          <div className="flex items-center gap-5">
+        {/* Center Playback Controls & Progress Bar */}
+        <div className="flex flex-col items-center w-[40%] max-w-[722px] gap-2">
+          {/* Controls */}
+          <div className="flex items-center gap-6">
             <button 
               id="player_shuffle_btn"
               onClick={onShuffleToggle}
-              disabled={!currentTrack}
-              className={`relative p-2 rounded-full focus:outline-none transition-all duration-200 disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center ${
-                shuffleMode === 1 || shuffleMode === 2 
-                  ? "text-[#1DB954] hover:text-[#1ed760] scale-105" 
-                  : "text-[#b3b3b3] hover:text-white"
+              className={`transition-all duration-200 relative focus:outline-none ${
+                shuffleMode > 0 ? "text-[#1DB954] hover:text-[#1ed760] scale-105" : "text-[#b3b3b3] hover:text-white"
               }`}
-              title={shuffleMode === 0 ? "Activer l'aléatoire" : shuffleMode === 1 ? "Smart Shuffle" : "Désactiver"}
+              title={
+                shuffleMode === 2 
+                  ? "Lecture Aléatoire Intelligente (Mode IA activé)" 
+                  : shuffleMode === 1 
+                    ? "Lecture Aléatoire (Active)" 
+                    : "Activer la lecture aléatoire"
+              }
             >
-              <div className="relative">
-                <Shuffle className="w-5 h-5" />
-                {shuffleMode === 2 && (
-                  <Sparkles className="w-2.5 h-2.5 text-[#1DB954] absolute -top-1.5 -left-1.5 fill-current animate-pulse" />
-                )}
-              </div>
-              {(shuffleMode === 1 || shuffleMode === 2) && (
-                <span className="absolute bottom-[-1px] w-1.5 h-1.5 bg-[#1DB954] rounded-full shadow-[0_0_4px_#1DB954]" />
+              <Shuffle className="w-4 h-4" />
+              {shuffleMode > 0 && (
+                <span className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#1DB954] rounded-full" />
+              )}
+              {shuffleMode === 2 && (
+                <span className="absolute -top-1.5 -right-2 bg-[#1DB954] text-black text-[8px] font-black px-1 rounded-full animate-bounce">
+                  IA
+                </span>
               )}
             </button>
 
             <button 
+              id="player_prev_btn"
               onClick={onPrevTrack}
               disabled={!currentTrack}
-              className="text-[#b3b3b3] hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-colors"
+              className="text-[#b3b3b3] hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none"
+              title="Précédent"
             >
               <SkipBack className="w-5 h-5 fill-current" />
             </button>
@@ -209,40 +262,51 @@ export default function Player({
               id="player_play_pause_btn"
               onClick={onPlayPauseToggle}
               disabled={!currentTrack}
-              className="w-9 h-9 bg-white text-black rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all disabled:opacity-40 disabled:pointer-events-none shadow-md"
+              className="w-8 h-8 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none shadow-md"
+              title={isPlaying ? "Pause" : "Lecture"}
             >
               {isPlaying ? (
-                <Pause className="w-5 h-5 fill-current text-black" />
+                <Pause className="w-4 h-4 fill-current" />
               ) : (
-                <Play className="w-5 h-5 fill-current text-black translate-x-[1px]" />
+                <Play className="w-4 h-4 fill-current ml-0.5" />
               )}
             </button>
 
             <button 
+              id="player_next_btn"
               onClick={onNextTrack}
               disabled={!currentTrack}
-              className="text-[#b3b3b3] hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-colors"
+              className="text-[#b3b3b3] hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none"
+              title="Suivant"
             >
               <SkipForward className="w-5 h-5 fill-current" />
             </button>
+
+            <button 
+              id="player_repeat_btn"
+              className="text-[#b3b3b3] hover:text-white transition-colors focus:outline-none"
+              title="Répéter"
+            >
+              <Repeat className="w-4 h-4" />
+            </button>
           </div>
 
-          {/* Timeline Slider */}
-          <div className="w-full flex items-center gap-3">
+          {/* Timeline Bar */}
+          <div className="w-full flex items-center gap-2">
             <span className="text-[11px] text-[#b3b3b3] min-w-[32px] text-right font-mono">
               {formatTime(currentTime)}
             </span>
-            
-            <div className="flex-1 relative group flex items-center">
+
+            <div className="flex-1 relative flex items-center group">
               <input
-                id="player_progress_slider"
+                id="player_timeline_slider"
                 type="range"
                 min={0}
                 max={duration || 100}
                 value={currentTime}
                 onChange={handleProgressChange}
                 disabled={!currentTrack}
-                className="w-full h-1 bg-[#4d4d4d] rounded-full appearance-none cursor-pointer outline-none focus:outline-none accent-[#1DB954] group-hover:bg-[#5a5a5a] relative z-10"
+                className="w-full h-1 bg-[#4d4d4d] group-hover:h-1.5 rounded-full appearance-none cursor-pointer outline-none focus:outline-none accent-[#1DB954] transition-all relative z-10"
                 style={{
                   background: `linear-gradient(to right, #1DB954 0%, #1DB954 ${progressPercent}%, #4d4d4d ${progressPercent}%, #4d4d4d 100%)`
                 }}
@@ -255,16 +319,38 @@ export default function Player({
           </div>
         </div>
 
-        {/* Sound / Volume & Options */}
+        {/* Sound / Volume & Remote Control Badge */}
         <div className="w-[30%] min-w-[180px] flex items-center justify-end gap-3 text-[#b3b3b3]">
+          {/* Spotify Connect Live Status Badge */}
+          {isRemoteControl && (
+            <div 
+              onClick={() => setIsDeviceModalOpen(true)}
+              className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#1DB954]/20 border border-[#1DB954]/40 text-[#1DB954] text-[11px] font-bold cursor-pointer hover:bg-[#1DB954]/30 transition-all animate-fade-in shadow-sm"
+              title="Télécommande active via Spotify Connect"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#1DB954] opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#1DB954]" />
+              </span>
+              <Laptop2 className="w-3.5 h-3.5" />
+              <span className="truncate max-w-[110px]">Sur {activeDeviceName}</span>
+            </div>
+          )}
+
           <button
+            id="player_device_selector_btn"
             onClick={() => setIsDeviceModalOpen(true)}
-            className={`p-1.5 rounded-full transition-colors ${
-              activeDeviceId !== "this_device" ? "text-[#1DB954] bg-[#1DB954]/10" : "hover:text-white text-[#b3b3b3]"
+            className={`relative p-1.5 rounded-full transition-all duration-200 cursor-pointer ${
+              isRemoteControl 
+                ? "text-[#1DB954] bg-[#1DB954]/20 border border-[#1DB954]/40 shadow-[0_0_12px_rgba(29,185,84,0.3)] hover:scale-110" 
+                : "hover:text-white text-[#b3b3b3] hover:bg-white/10"
             }`}
-            title="Sélecteur d'appareil d'écoute"
+            title="Spotify Connect - Sélecteur d'appareil (Télécommande)"
           >
             <Laptop2 className="w-5 h-5" />
+            {isRemoteControl && (
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#1DB954] rounded-full border-2 border-[#121212] animate-pulse" />
+            )}
           </button>
 
           <button 
@@ -295,249 +381,164 @@ export default function Player({
         </div>
       </footer>
 
-      {/* 2. MOBILE FLOATING MINI-PLAYER BAR (visible on screens < md) */}
+      {/* 2. MOBILE FLOATING MINI-PLAYER BAR (< md) */}
       {currentTrack && (
         <div 
-          className="fixed bottom-[calc(56px+env(safe-area-inset-bottom,0px))] left-2 right-2 z-40 md:hidden bg-gradient-to-r from-[#0d5d67] to-[#073c43] border border-[#147a87]/30 rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.6)] overflow-hidden select-none active:scale-[0.99] transition-all"
+          onClick={() => setIsMobileExpanded(true)}
+          className="md:hidden fixed bottom-[60px] left-2 right-2 h-14 bg-[#1f1f1f]/95 backdrop-blur-xl border border-white/10 rounded-xl px-3 flex items-center justify-between z-40 shadow-2xl cursor-pointer active:scale-98 transition-all"
           id="mobile_mini_player"
         >
-          <div 
-            className="p-2 flex items-center justify-between gap-3 cursor-pointer relative pb-3"
-            onClick={() => setIsMobileExpanded(true)}
-          >
-            {/* Thumbnail + Title */}
-            <div className="flex items-center gap-2.5 overflow-hidden flex-1">
-              <div className="w-10 h-10 rounded-lg bg-black/20 overflow-hidden shrink-0 border border-white/5 shadow-md relative">
-                <img
-                  referrerPolicy="no-referrer"
-                  src={currentTrack.thumbnail}
-                  alt={currentTrack.title}
-                  className="w-full h-full object-cover animate-fade-in"
-                />
-              </div>
-              <div className="overflow-hidden flex-1">
-                <p className="text-xs font-bold text-white truncate leading-tight">
-                  {currentTrack.title}
-                </p>
-                <p className="text-[11px] text-[#b2d3d6] truncate mt-0.5 leading-tight">
-                  {currentTrack.artist}
-                </p>
-              </div>
-            </div>
+          {/* Progress bar line at top edge */}
+          <div className="absolute top-0 left-0 right-0 h-0.5 bg-white/10 rounded-t-xl overflow-hidden">
+            <div 
+              className="h-full bg-[#1DB954] transition-all duration-300" 
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
 
-            {/* Quick Actions */}
-            <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-              <button
-                onClick={() => setIsDeviceModalOpen(true)}
-                className={`p-1.5 transition-colors ${
-                  activeDeviceId !== "this_device" ? "text-[#1DB954]" : "text-white/80 hover:text-white"
-                }`}
-                title="Connecter un appareil"
-              >
-                <Laptop2 className="w-5 h-5" />
-              </button>
-
-              <button
-                onClick={onPlayPauseToggle}
-                className="p-1.5 text-white hover:text-white transition-all active:scale-90"
-              >
-                {isPlaying ? (
-                  <Pause className="w-5 h-5 fill-current text-white" />
-                ) : (
-                  <Play className="w-5 h-5 fill-current text-white translate-x-[0.5px]" />
+          <div className="flex items-center gap-3 overflow-hidden">
+            <img 
+              src={currentTrack.thumbnail} 
+              alt={currentTrack.title} 
+              className="w-10 h-10 rounded-lg object-cover shrink-0 border border-white/10" 
+            />
+            <div className="overflow-hidden">
+              <p className="text-xs font-bold text-white truncate">{currentTrack.title}</p>
+              <p className="text-[11px] text-neutral-400 truncate flex items-center gap-1">
+                {currentTrack.artist}
+                {isRemoteControl && (
+                  <span className="text-[9px] font-bold text-[#1DB954] bg-[#1DB954]/10 px-1 rounded">
+                    • {activeDeviceName}
+                  </span>
                 )}
-              </button>
+              </p>
             </div>
+          </div>
 
-            {/* Inline Progress Bar at the absolute bottom */}
-            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/10">
-              <div 
-                className="h-full bg-white transition-all duration-300"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
+          <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setIsDeviceModalOpen(true)}
+              className="p-2 text-[#1DB954] hover:text-white"
+            >
+              <Laptop2 className="w-5 h-5" />
+            </button>
+            <button
+              onClick={onPlayPauseToggle}
+              className="w-9 h-9 rounded-full bg-white text-black flex items-center justify-center font-bold"
+            >
+              {isPlaying ? (
+                <Pause className="w-4 h-4 fill-current" />
+              ) : (
+                <Play className="w-4 h-4 fill-current ml-0.5" />
+              )}
+            </button>
           </div>
         </div>
       )}
 
-      {/* 3. MOBILE FULL-SCREEN PLAYER MODAL OVERLAY */}
+      {/* 3. MOBILE FULL-SCREEN PLAYER MODAL */}
       {currentTrack && isMobileExpanded && (
-        <div 
-          className="fixed inset-0 z-50 bg-gradient-to-b from-[#18182c] via-[#0d0d16] to-[#08080f] flex flex-col p-6 pt-safe pb-safe text-white md:hidden animate-in slide-in-from-bottom duration-300 select-none overflow-y-auto"
-          id="mobile_fullscreen_player"
-        >
-          {/* Modal Header */}
-          <div className="flex items-center justify-between mb-6 shrink-0">
-            <button
+        <div className="md:hidden fixed inset-0 bg-gradient-to-b from-[#181818] via-[#121212] to-black z-50 flex flex-col justify-between p-6 animate-fade-in select-none">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <button 
               onClick={() => setIsMobileExpanded(false)}
-              className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white active:scale-90 transition-transform"
+              className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-white"
             >
-              <ChevronDown className="w-6 h-6" />
+              <X className="w-5 h-5" />
             </button>
             <div className="text-center">
-              <span className="text-[10px] uppercase font-bold tracking-widest text-neutral-400">
-                Lecteur Mobile
-              </span>
-              <p className="text-xs font-semibold text-neutral-200">
-                En cours de lecture
+              <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">Écoute en cours</p>
+              <p className="text-xs font-bold text-[#1DB954] flex items-center justify-center gap-1">
+                <Laptop2 className="w-3 h-3" /> {activeDeviceName}
               </p>
             </div>
-            <div className="w-10" />
+            <div className="w-9" />
           </div>
 
-          {/* Large High-Res Album Cover Art */}
-          <div className="my-auto py-4 flex flex-col items-center">
-            <div className="w-full max-w-[300px] aspect-square rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.8)] border border-white/10 relative group mb-6">
-              <img
-                referrerPolicy="no-referrer"
-                src={currentTrack.thumbnail}
-                alt={currentTrack.title}
-                className="w-full h-full object-cover"
-              />
-            </div>
+          {/* Cover Art */}
+          <div className="w-full max-w-[280px] mx-auto aspect-square rounded-2xl overflow-hidden shadow-2xl border border-white/10 my-auto">
+            <img 
+              src={currentTrack.thumbnail} 
+              alt={currentTrack.title} 
+              className="w-full h-full object-cover"
+            />
+          </div>
 
-            {/* Track Info */}
-            <div className="w-full text-center px-2 mb-4">
-              <div className="flex items-center justify-center gap-2">
-                <h2 className="text-xl font-black text-white truncate max-w-[260px]">
-                  {currentTrack.title}
-                </h2>
-                {isRecommendation && (
-                  <span className="bg-[#1DB954]/20 text-[#1DB954] border border-[#1DB954]/40 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 animate-pulse">
-                    <Sparkles className="w-2.5 h-2.5 fill-current" /> IA
-                  </span>
-                )}
-              </div>
+          {/* Track Metadata */}
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-bold text-white line-clamp-1">{currentTrack.title}</h2>
               <p 
                 onClick={() => {
                   setIsMobileExpanded(false);
                   onSelectArtist?.(currentTrack.artist);
                 }}
-                className="text-sm font-semibold text-[#1DB954] mt-1 cursor-pointer hover:underline"
+                className="text-sm text-neutral-400 font-medium hover:underline cursor-pointer"
               >
                 {currentTrack.artist}
               </p>
             </div>
+            <button 
+              onClick={onLikeToggle}
+              className={`p-2 focus:outline-none ${isLiked ? "text-[#1DB954]" : "text-neutral-400"}`}
+            >
+              <Heart className={`w-6 h-6 ${isLiked ? "fill-current" : ""}`} />
+            </button>
           </div>
 
-          {/* Interactive Progress Slider */}
-          <div className="w-full mb-6 shrink-0 px-1">
+          {/* Mobile Progress Bar */}
+          <div className="space-y-1 mb-6">
             <input
               type="range"
               min={0}
               max={duration || 100}
               value={currentTime}
               onChange={handleProgressChange}
-              className="w-full h-2 bg-white/20 rounded-full appearance-none cursor-pointer outline-none accent-[#1DB954]"
-              style={{
-                background: `linear-gradient(to right, #1DB954 0%, #1DB954 ${progressPercent}%, rgba(255,255,255,0.2) ${progressPercent}%, rgba(255,255,255,0.2) 100%)`
-              }}
+              className="w-full h-1.5 bg-white/20 rounded-full appearance-none outline-none accent-[#1DB954]"
             />
-            <div className="flex justify-between text-xs font-mono text-neutral-400 mt-2">
+            <div className="flex justify-between text-xs font-mono text-neutral-400">
               <span>{formatTime(currentTime)}</span>
               <span>{formatTime(duration)}</span>
             </div>
           </div>
 
-          {/* Main Controls Row */}
-          <div className="flex items-center justify-around mb-8 shrink-0">
-            {/* Shuffle */}
-            <button
-              onClick={onShuffleToggle}
-              className={`p-3 rounded-full transition-all active:scale-90 relative flex flex-col items-center justify-center ${
-                shuffleMode > 0 ? "text-[#1DB954] bg-[#1DB954]/10" : "text-neutral-400"
-              }`}
-              title={
-                shuffleMode === 0 
-                  ? "Activer l'aléatoire" 
-                  : shuffleMode === 1 
-                  ? "Aléatoire" 
-                  : "Smart Shuffle (Mode IA)"
-              }
-            >
-              <div className="relative flex items-center justify-center">
-                <Shuffle className="w-6 h-6" />
-                {shuffleMode === 2 && (
-                  <Sparkles className="w-3.5 h-3.5 text-[#1DB954] absolute -top-2 -left-2 fill-current animate-pulse" />
-                )}
-              </div>
-              {shuffleMode === 2 && (
-                <span className="absolute -bottom-1.5 bg-[#1DB954] text-black text-[8px] font-black px-1.5 py-0.2 rounded-full tracking-wider uppercase shadow-[0_0_8px_#1DB954]">
-                  IA
-                </span>
-              )}
-              {shuffleMode === 1 && (
-                <span className="absolute -bottom-1 w-1.5 h-1.5 bg-[#1DB954] rounded-full shadow-[0_0_6px_#1DB954]" />
-              )}
+          {/* Mobile Controls */}
+          <div className="flex items-center justify-between mb-8">
+            <button onClick={onShuffleToggle} className={shuffleMode > 0 ? "text-[#1DB954]" : "text-neutral-400"}>
+              <Shuffle className="w-5 h-5" />
             </button>
-
-            {/* Prev */}
-            <button
-              onClick={onPrevTrack}
-              className="p-3 text-white active:scale-90 transition-transform"
-            >
+            <button onClick={onPrevTrack} className="text-white">
               <SkipBack className="w-7 h-7 fill-current" />
             </button>
-
-            {/* Main Play/Pause Button */}
-            <button
+            <button 
               onClick={onPlayPauseToggle}
-              className="w-16 h-16 rounded-full bg-[#1DB954] text-black flex items-center justify-center font-bold shadow-xl shadow-[#1db954]/30 active:scale-90 transition-transform"
+              className="w-16 h-16 rounded-full bg-white text-black flex items-center justify-center text-xl shadow-xl active:scale-95 transition-all"
             >
               {isPlaying ? (
-                <Pause className="w-7 h-7 fill-current text-black" />
+                <Pause className="w-8 h-8 fill-current" />
               ) : (
-                <Play className="w-7 h-7 fill-current text-black translate-x-[1px]" />
+                <Play className="w-8 h-8 fill-current ml-1" />
               )}
             </button>
-
-            {/* Next */}
-            <button
-              onClick={onNextTrack}
-              className="p-3 text-white active:scale-90 transition-transform"
-            >
+            <button onClick={onNextTrack} className="text-white">
               <SkipForward className="w-7 h-7 fill-current" />
             </button>
-
-            {/* Heart */}
-            <button
-              onClick={onLikeToggle}
-              className={`p-3 rounded-full transition-all active:scale-90 ${
-                isLiked ? "text-[#1DB954]" : "text-neutral-400"
-              }`}
-            >
-              <Heart className={`w-6 h-6 ${isLiked ? "fill-current" : ""}`} />
+            <button onClick={() => setIsDeviceModalOpen(true)} className="text-[#1DB954]">
+              <Laptop2 className="w-5 h-5" />
             </button>
-          </div>
-
-          {/* Volume Row */}
-          <div className="flex items-center gap-3 px-4 py-3 bg-white/5 rounded-2xl shrink-0">
-            <button onClick={handleVolumeToggle} className="text-neutral-400">
-              {volume === 0 ? <VolumeX className="w-5 h-5 text-red-400" /> : <Volume2 className="w-5 h-5" />}
-            </button>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={volume}
-              onChange={(e) => setVolume(parseInt(e.target.value))}
-              className="w-full h-1.5 bg-white/20 rounded-full appearance-none outline-none accent-[#1DB954]"
-              style={{
-                background: `linear-gradient(to right, #1DB954 0%, #1DB954 ${volume}%, rgba(255,255,255,0.2) ${volume}%, rgba(255,255,255,0.2) 100%)`
-              }}
-            />
           </div>
         </div>
       )}
 
-      {/* 4. FUNCTIONAL DEVICE SELECTOR MODAL */}
+      {/* 4. FUNCTIONAL SPOTIFY CONNECT DEVICE SELECTOR MODAL */}
       {isDeviceModalOpen && (
         <div 
           className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fade-in select-none"
           onClick={() => setIsDeviceModalOpen(false)}
         >
           <div 
-            className="bg-[#181818] border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl text-white relative flex flex-col gap-5 overflow-hidden"
+            className="bg-[#181818] border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl text-white relative flex flex-col gap-5 overflow-hidden max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -547,8 +548,8 @@ export default function Player({
                   <Laptop2 className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-white">Sélecteur d'appareil</h3>
-                  <p className="text-xs text-neutral-400">Écoutez votre musique sur n'importe quel dispositif</p>
+                  <h3 className="font-bold text-base text-white">Spotify Connect</h3>
+                  <p className="text-xs text-neutral-400">Contrôle multi-appareils en temps réel</p>
                 </div>
               </div>
               <button 
@@ -559,6 +560,20 @@ export default function Player({
               </button>
             </div>
 
+            {/* Transfer Playback CTA if on secondary device */}
+            {isRemoteControl && spotifyConnect && (
+              <button
+                onClick={() => {
+                  spotifyConnect.transferPlaybackToThisDevice();
+                  setIsDeviceModalOpen(false);
+                }}
+                className="w-full py-3 px-4 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] active:scale-98 transition-all flex items-center justify-center gap-2 text-sm font-bold text-black shadow-lg shadow-[#1DB954]/20"
+              >
+                <Volume2 className="w-4 h-4" />
+                Écouter sur cet appareil ({spotifyConnect.deviceName})
+              </button>
+            )}
+
             {/* Currently Playing Target Display */}
             {currentTrack && (
               <div className="bg-gradient-to-r from-[#112a1c] to-[#0c1813] border border-[#1DB954]/20 rounded-xl p-3 flex items-center gap-3">
@@ -568,89 +583,122 @@ export default function Player({
                 <div className="flex-1 overflow-hidden">
                   <div className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-[#1DB954] animate-ping" />
-                    <span className="text-[10px] font-mono text-[#1DB954] uppercase tracking-wider font-bold">En cours d'écoute</span>
+                    <span className="text-[10px] font-mono text-[#1DB954] uppercase tracking-wider font-bold">
+                      Lecture sur : {activeDeviceName}
+                    </span>
                   </div>
                   <p className="text-xs font-bold text-white truncate">{currentTrack.title}</p>
                 </div>
               </div>
             )}
 
-            {/* Available Devices List */}
+            {/* Registered Devices List */}
             <div className="flex flex-col gap-2">
-              <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider px-1">Appareils disponibles</p>
+              <div className="flex items-center justify-between px-1">
+                <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Appareils connectés au compte</p>
+                <span className="text-[10px] text-[#1DB954] font-mono font-bold">
+                  {spotifyConnect ? spotifyConnect.onlineDevices.length : 1} en ligne
+                </span>
+              </div>
               
-              {/* Option 1: Ce navigateur Web */}
-              <div 
-                onClick={() => setActiveDeviceId("this_device")}
-                className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
-                  activeDeviceId === "this_device"
-                    ? "bg-[#1DB954]/15 border-[#1DB954]/50 text-white"
-                    : "bg-white/[0.03] border-white/5 hover:bg-white/[0.07] text-neutral-300"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Laptop2 className={`w-5 h-5 ${activeDeviceId === "this_device" ? "text-[#1DB954]" : "text-neutral-400"}`} />
-                  <div>
-                    <p className="text-sm font-bold flex items-center gap-2">
-                      Ce navigateur Web
-                      {activeDeviceId === "this_device" && (
-                        <span className="text-[10px] bg-[#1DB954] text-black px-2 py-0.2 rounded-full font-black">ACTIF</span>
-                      )}
-                    </p>
-                    <p className="text-xs text-neutral-400">Haut-parleurs système • Qualité haute fidélité</p>
-                  </div>
-                </div>
-                {activeDeviceId === "this_device" && <Check className="w-5 h-5 text-[#1DB954]" />}
-              </div>
+              {spotifyConnect && spotifyConnect.onlineDevices.length > 0 ? (
+                spotifyConnect.onlineDevices.map((dev: any) => {
+                  const isActive = dev.id === activeDeviceId;
+                  const isThisDev = dev.isThisDevice;
 
-              {/* Option 2: AirPlay / Bluetooth */}
-              <div 
-                onClick={() => setActiveDeviceId("airplay_bt")}
-                className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
-                  activeDeviceId === "airplay_bt"
-                    ? "bg-[#1DB954]/15 border-[#1DB954]/50 text-white"
-                    : "bg-white/[0.03] border-white/5 hover:bg-white/[0.07] text-neutral-300"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Headphones className={`w-5 h-5 ${activeDeviceId === "airplay_bt" ? "text-[#1DB954]" : "text-neutral-400"}`} />
-                  <div>
-                    <p className="text-sm font-bold flex items-center gap-2">
-                      Casque Bluetooth / AirPlay
-                      {activeDeviceId === "airplay_bt" && (
-                        <span className="text-[10px] bg-[#1DB954] text-black px-2 py-0.2 rounded-full font-black">CONNECTÉ</span>
-                      )}
-                    </p>
-                    <p className="text-xs text-neutral-400">Sortie sans fil système détectée</p>
-                  </div>
-                </div>
-                {activeDeviceId === "airplay_bt" && <Check className="w-5 h-5 text-[#1DB954]" />}
-              </div>
+                  return (
+                    <div 
+                      key={dev.id}
+                      onClick={() => {
+                        if (isThisDev && !isActive) {
+                          spotifyConnect.transferPlaybackToThisDevice();
+                        } else if (!isActive) {
+                          spotifyConnect.setActiveDeviceId(dev.id);
+                        }
+                      }}
+                      className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                        isActive
+                          ? "bg-[#1DB954]/15 border-[#1DB954]/50 text-white shadow-md shadow-[#1DB954]/10"
+                          : "bg-white/[0.03] border-white/5 hover:bg-white/[0.07] text-neutral-300"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={isActive ? "text-[#1DB954]" : "text-neutral-400"}>
+                          {renderDeviceIcon(dev.type)}
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold flex items-center gap-2">
+                            {dev.name}
+                            {isThisDev && (
+                              <span className="text-[9px] bg-white/10 text-neutral-300 px-1.5 py-0.5 rounded font-medium">
+                                Cet appareil
+                              </span>
+                            )}
+                            {isActive && (
+                              <span className="text-[9px] bg-[#1DB954] text-black px-1.5 py-0.2 rounded-full font-black">
+                                ACTIF
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-xs text-neutral-400">
+                            {isActive ? "En cours de diffusion audio" : "Télécommande disponible"}
+                          </p>
+                        </div>
+                      </div>
 
-              {/* Option 3: Google Cast / Smart TV */}
-              <div 
-                onClick={() => setActiveDeviceId("smart_tv")}
-                className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
-                  activeDeviceId === "smart_tv"
-                    ? "bg-[#1DB954]/15 border-[#1DB954]/50 text-white"
-                    : "bg-white/[0.03] border-white/5 hover:bg-white/[0.07] text-neutral-300"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Tv className={`w-5 h-5 ${activeDeviceId === "smart_tv" ? "text-[#1DB954]" : "text-neutral-400"}`} />
-                  <div>
-                    <p className="text-sm font-bold flex items-center gap-2">
-                      Google Cast / TV Salon
-                      {activeDeviceId === "smart_tv" && (
-                        <span className="text-[10px] bg-[#1DB954] text-black px-2 py-0.2 rounded-full font-black">CONNECTÉ</span>
-                      )}
-                    </p>
-                    <p className="text-xs text-neutral-400">Diffusion Wi-Fi locale (DLNA / Cast)</p>
-                  </div>
+                      <div className="flex items-center gap-2">
+                        {isActive && <Check className="w-5 h-5 text-[#1DB954]" />}
+                        {!isActive && isThisDev && (
+                          <span className="text-xs font-bold text-[#1DB954] hover:underline">
+                            Transférer ici
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="p-4 rounded-xl bg-white/5 border border-white/5 text-center text-xs text-neutral-400">
+                  Recherche des appareils connectés...
                 </div>
-                {activeDeviceId === "smart_tv" && <Check className="w-5 h-5 text-[#1DB954]" />}
-              </div>
+              )}
             </div>
+
+            {/* Rename Device Option */}
+            {spotifyConnect && (
+              <div className="pt-3 border-t border-white/10 flex flex-col gap-2">
+                <div className="flex items-center justify-between text-xs text-neutral-400">
+                  <span>Nom de cet appareil : <strong className="text-white">{spotifyConnect.deviceName}</strong></span>
+                  <button 
+                    onClick={() => {
+                      setEditedDeviceName(spotifyConnect.deviceName);
+                      setIsEditingDeviceName(!isEditingDeviceName);
+                    }}
+                    className="text-[#1DB954] hover:underline flex items-center gap-1 font-semibold"
+                  >
+                    <Edit2 className="w-3 h-3" /> Modifier
+                  </button>
+                </div>
+
+                {isEditingDeviceName && (
+                  <div className="flex gap-2 mt-1">
+                    <input
+                      type="text"
+                      value={editedDeviceName}
+                      onChange={(e) => setEditedDeviceName(e.target.value)}
+                      placeholder="Ex: PC du Salon, iPhone de Thomas..."
+                      className="flex-1 bg-black/50 border border-white/20 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#1DB954]"
+                    />
+                    <button
+                      onClick={handleSaveDeviceName}
+                      className="bg-[#1DB954] text-black font-bold text-xs px-3 py-1.5 rounded-lg hover:bg-[#1ed760]"
+                    >
+                      Enregistrer
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Scan for new devices */}
             <div className="pt-2 border-t border-white/10 flex items-center justify-between">

@@ -1086,55 +1086,67 @@ function getKnownArtistSongs(artistName: string): string[] | null {
   return null;
 }
 
+function isArtistMatch(rawArtistName: string, targetArtistName: string): boolean {
+  if (!rawArtistName || !targetArtistName) return false;
+  const a = rawArtistName.toLowerCase().trim();
+  const t = targetArtistName.toLowerCase().trim();
+
+  // Exact match
+  if (a === t) return true;
+
+  // Split by collaboration separators (&, x, feat, featuring, comma, slash, etc.)
+  const parts = a.split(/\s*(?:&|x|feat\.?|featuring|,|\/)\s*/i);
+  return parts.some(p => p.trim() === t);
+}
+
 async function fetchArtistTopSongsFromITunes(artistName: string): Promise<{ title: string; rank: number; duration?: string; thumbnail?: string }[]> {
-  try {
-    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&entity=song&limit=50`;
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(3500),
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      }
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.results && data.results.length > 0) {
-        const artistLower = artistName.toLowerCase().trim();
-        const matching = data.results.filter((s: any) => {
-          const a = (s.artistName || "").toLowerCase().trim();
-          return a.includes(artistLower) || artistLower.includes(a);
-        });
+  const songs: { title: string; rank: number; duration?: string; thumbnail?: string }[] = [];
+  const seenTitles = new Set<string>();
 
-        if (matching.length > 0) {
-          const seenTitles = new Set<string>();
-          const songs: { title: string; rank: number; duration?: string; thumbnail?: string }[] = [];
+  const urls = [
+    `https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&entity=song&limit=50&country=FR`,
+    `https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&entity=song&limit=50`
+  ];
 
-          matching.forEach((s: any, idx: number) => {
-            const rawTitle = s.trackName || "";
-            const normTitle = rawTitle.toLowerCase().replace(/\(.*\)/g, "").trim();
-            if (rawTitle && !seenTitles.has(normTitle)) {
-              seenTitles.add(normTitle);
-              const ms = s.trackTimeMillis || 210000;
-              const min = Math.floor(ms / 60000);
-              const sec = String(Math.floor((ms % 60000) / 1000)).padStart(2, "0");
-              const cover = (s.artworkUrl100 || "").replace("100x100bb", "600x600bb");
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(3500),
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.results && data.results.length > 0) {
+          data.results.forEach((s: any) => {
+            if (isArtistMatch(s.artistName, artistName)) {
+              const rawTitle = s.trackName || "";
+              const normTitle = rawTitle.toLowerCase().replace(/\(.*\)/g, "").trim();
+              if (rawTitle && !seenTitles.has(normTitle)) {
+                seenTitles.add(normTitle);
+                const ms = s.trackTimeMillis || 210000;
+                const min = Math.floor(ms / 60000);
+                const sec = String(Math.floor((ms % 60000) / 1000)).padStart(2, "0");
+                const cover = (s.artworkUrl100 || "").replace("100x100bb", "600x600bb");
 
-              songs.push({
-                title: rawTitle,
-                rank: 1000000 - idx * 20000,
-                duration: `${min}:${sec}`,
-                thumbnail: cover
-              });
+                songs.push({
+                  title: rawTitle,
+                  rank: 1000000 - songs.length * 20000,
+                  duration: `${min}:${sec}`,
+                  thumbnail: cover
+                });
+              }
             }
           });
-
-          return songs;
         }
       }
+    } catch (e) {
+      console.warn(`[iTunes Top Songs Error] Could not fetch songs for ${artistName}:`, e);
     }
-  } catch (e) {
-    console.warn(`[iTunes Top Songs Error] Could not fetch songs for ${artistName}:`, e);
   }
-  return [];
+
+  return songs;
 }
 
 async function fetchArtistTopSongsFromGemini(artistName: string): Promise<string[]> {
@@ -1190,8 +1202,8 @@ async function fetchArtistTopSongsFromDeezer(artistName: string): Promise<{ titl
       const searchData = await searchRes.json();
       if (searchData && searchData.data && searchData.data.length > 0) {
         const match = searchData.data.find(
-          (a: any) => a.name.toLowerCase().trim() === artistName.toLowerCase().trim()
-        ) || searchData.data[0];
+          (a: any) => isArtistMatch(a.name, artistName)
+        );
 
         if (match && match.id) {
           const artistId = match.id;
@@ -1449,44 +1461,47 @@ async function fetchArtistAlbumsFromITunesAndDeezer(artistName: string): Promise
   const albums: any[] = [];
   const seenTitles = new Set<string>();
 
-  // 1. Fetch complete official discography from iTunes API
-  try {
-    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&entity=album&limit=100`;
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(3500),
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      }
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.results && data.results.length > 0) {
-        const artistLower = artistName.toLowerCase().trim();
-        data.results.forEach((a: any) => {
-          const aArtist = (a.artistName || "").toLowerCase().trim();
-          if (aArtist.includes(artistLower) || artistLower.includes(aArtist)) {
-            const title = a.collectionName || "";
-            const normTitle = title.toLowerCase().replace(/\(.*\)/g, "").trim();
-            if (title && !seenTitles.has(normTitle) && !normTitle.includes("karaoke")) {
-              seenTitles.add(normTitle);
-              albums.push({
-                id: `itunes:${a.collectionId}`,
-                title: title,
-                cover: (a.artworkUrl100 || "").replace("100x100bb", "600x600bb"),
-                year: a.releaseDate ? a.releaseDate.split("-")[0] : "2020",
-                tracksCount: a.trackCount || 10
-              });
+  const albumUrls = [
+    `https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&entity=album&limit=100&country=FR`,
+    `https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&entity=album&limit=100`
+  ];
+
+  for (const url of albumUrls) {
+    try {
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(3500),
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.results && data.results.length > 0) {
+          data.results.forEach((a: any) => {
+            if (isArtistMatch(a.artistName, artistName)) {
+              const title = a.collectionName || "";
+              const normTitle = title.toLowerCase().replace(/\(.*\)/g, "").trim();
+              if (title && !seenTitles.has(normTitle) && !normTitle.includes("karaoke")) {
+                seenTitles.add(normTitle);
+                albums.push({
+                  id: `itunes:${a.collectionId}`,
+                  title: title,
+                  cover: (a.artworkUrl100 || "").replace("100x100bb", "600x600bb"),
+                  year: a.releaseDate ? a.releaseDate.split("-")[0] : "2020",
+                  tracksCount: a.trackCount || 10
+                });
+              }
             }
-          }
-        });
+          });
+        }
       }
+    } catch (e) {
+      console.warn(`[iTunes Albums Fetch Error] for ${artistName}:`, e);
     }
-  } catch (e) {
-    console.warn(`[iTunes Albums Fetch Error] for ${artistName}:`, e);
   }
 
   // 2. Supplement with Deezer API if iTunes returns few results
-  if (albums.length < 10) {
+  if (albums.length < 5) {
     try {
       const deezerAlbums = await fetchArtistAlbumsFromDeezer(artistName);
       deezerAlbums.forEach((a: any) => {
@@ -1524,8 +1539,8 @@ async function fetchArtistAlbumsFromDeezer(artistName: string): Promise<any[]> {
       const searchData = await searchRes.json();
       if (searchData && searchData.data && searchData.data.length > 0) {
         const match = searchData.data.find(
-          (a: any) => a.name.toLowerCase().trim() === artistName.toLowerCase().trim()
-        ) || searchData.data[0];
+          (a: any) => isArtistMatch(a.name, artistName)
+        );
 
         if (match && match.id) {
           const artistId = match.id;

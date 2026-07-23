@@ -24,7 +24,15 @@ service cloud.firestore {
 
     // Rules for "users" collection and nested sub-collections
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read, write: if isOwner(userId) || userId == "guest_session" || userId.startsWith("guest_");
+
+      match /devices/{deviceId} {
+        allow read, write: if isOwner(userId) || userId == "guest_session" || userId.startsWith("guest_") || !isSignedIn();
+      }
+
+      match /playback/{playbackId} {
+        allow read, write: if isOwner(userId) || userId == "guest_session" || userId.startsWith("guest_") || !isSignedIn();
+      }
 
       match /likedTracks/{trackId} {
         allow read, write: if isOwner(userId);

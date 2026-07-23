@@ -385,7 +385,7 @@ export default function Player({
       {currentTrack && (
         <div 
           onClick={() => setIsMobileExpanded(true)}
-          className="md:hidden fixed bottom-[60px] left-2 right-2 h-14 bg-[#1f1f1f]/95 backdrop-blur-xl border border-white/10 rounded-xl px-3 flex items-center justify-between z-40 shadow-2xl cursor-pointer active:scale-98 transition-all"
+          className="md:hidden fixed bottom-[calc(60px+env(safe-area-inset-bottom,0px))] left-2 right-2 h-14 bg-[#1f1f1f]/95 backdrop-blur-xl border border-white/10 rounded-xl px-3 flex items-center justify-between z-45 shadow-2xl cursor-pointer active:scale-98 transition-all"
           id="mobile_mini_player"
         >
           {/* Progress bar line at top edge */}

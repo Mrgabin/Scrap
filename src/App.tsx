@@ -673,14 +673,6 @@ export default function App() {
       return;
     }
 
-    addToSearchHistory({
-      id: `query_${trimmed.toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
-      name: trimmed,
-      type: "Recherche",
-      subtitle: "Recherche texte",
-      image: ""
-    });
-
     setSearchLoading(true);
     try {
       const response = await fetch(`/api/search`, {
@@ -1366,9 +1358,23 @@ export default function App() {
     artistName?: string;
     playlistId?: string;
   }) => {
-    // 1. Optimistic UI update
+    // 1. Optimistic UI update with smart deduplication
     setSearchHistory((prevHistory) => {
-      const filtered = prevHistory.filter((h) => h.id !== item.id && h.name !== item.name);
+      const filtered = prevHistory.filter((h) => {
+        // Direct ID or exact name match
+        if (h.id === item.id || h.name.toLowerCase() === item.name.toLowerCase()) return false;
+        
+        // If adding a text query ("Recherche"), remove previous partial text queries that are prefixes/suffixes
+        if (item.type === "Recherche" && h.type === "Recherche") {
+          const newNameLower = item.name.toLowerCase().trim();
+          const oldNameLower = h.name.toLowerCase().trim();
+          if (newNameLower.startsWith(oldNameLower) || oldNameLower.startsWith(newNameLower)) {
+            return false;
+          }
+        }
+        return true;
+      });
+
       const updated = [item, ...filtered].slice(0, 15);
       const key = getSearchHistoryKey(user);
       if (key) {

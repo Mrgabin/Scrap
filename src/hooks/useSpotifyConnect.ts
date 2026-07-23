@@ -56,7 +56,8 @@ export function useSpotifyConnect({
 
   // Helper to check if current device is active
   const isThisDeviceActive = activeDeviceId === thisDeviceId;
-  const isRemoteControlMode = !!activeDeviceId && activeDeviceId !== thisDeviceId;
+  const isRemoteControlMode = (!!activeDeviceId && activeDeviceId !== thisDeviceId) ||
+    (!!remotePlayback?.activeDeviceId && remotePlayback.activeDeviceId !== thisDeviceId);
 
   // Derive active device name and type
   const activeDeviceObj = onlineDevices.find(d => d.id === activeDeviceId);
@@ -76,29 +77,61 @@ export function useSpotifyConnect({
         const data = event.data;
         if (!data) return;
 
-        if (data.type === "SYNC_DEVICES") {
+        if (data.type === "REQUEST_SYNC") {
+          // Broadcast this device's presence
+          const thisDev: DeviceInfo = {
+            id: thisDeviceId,
+            name: deviceName,
+            type: deviceType,
+            lastActive: Date.now(),
+            isThisDevice: true,
+            volume
+          };
+          channel.postMessage({ type: "SYNC_DEVICES", device: thisDev });
+
+          // If this device is active, also broadcast current playback
+          if (isThisDeviceActive && currentTrack) {
+            const playbackData: SpotifyConnectPlayback = {
+              activeDeviceId: thisDeviceId,
+              activeDeviceName: deviceName,
+              activeDeviceType: deviceType,
+              currentTrack,
+              isPlaying,
+              progressMs: Math.floor(currentTime * 1000),
+              durationMs: Math.floor(duration * 1000),
+              volume,
+              updatedAt: Date.now()
+            };
+            channel.postMessage({ type: "PLAYBACK_UPDATE", playback: playbackData });
+          }
+        } else if (data.type === "SYNC_DEVICES") {
           setOnlineDevices(prev => {
             const exists = prev.some(d => d.id === data.device.id);
             if (exists) {
-              return prev.map(d => d.id === data.device.id ? { ...d, lastActive: Date.now() } : d);
+              return prev.map(d => d.id === data.device.id ? { ...d, lastActive: Date.now(), name: data.device.name } : d);
             }
-            return [...prev, data.device];
+            return [...prev, { ...data.device, isThisDevice: data.device.id === thisDeviceId }];
           });
         } else if (data.type === "PLAYBACK_UPDATE") {
-          setRemotePlayback(data.playback);
-          if (data.playback.activeDeviceId) {
-            setActiveDeviceId(data.playback.activeDeviceId);
+          if (data.playback) {
+            setRemotePlayback(data.playback);
+            if (data.playback.activeDeviceId) {
+              setActiveDeviceId(data.playback.activeDeviceId);
+            }
           }
         } else if (data.type === "COMMAND" && data.command.targetDeviceId === thisDeviceId) {
           executeCommandLocally(data.command);
         }
       };
 
+      // Request initial sync from existing active tabs
+      channel.postMessage({ type: "REQUEST_SYNC", senderDeviceId: thisDeviceId });
+
       return () => {
         channel.close();
       };
     }
-  }, [userId, thisDeviceId]);
+  }, [userId, thisDeviceId, deviceName, deviceType, isThisDeviceActive, currentTrack, isPlaying, currentTime, duration, volume]);
 
   // 2. Register & Heartbeat device in Firestore
   useEffect(() => {
@@ -117,14 +150,12 @@ export function useSpotifyConnect({
         broadcastChannelRef.current.postMessage({ type: "SYNC_DEVICES", device: thisDev });
       }
 
-      // Sync to Firestore for non-guest authenticated users (or standard session)
-      if (user && !user.isGuest) {
-        try {
-          const devDocRef = doc(db, "users", userId, "devices", thisDeviceId);
-          await setDoc(devDocRef, thisDev, { merge: true });
-        } catch (e) {
-          // Silent catch for guest or offline mode
-        }
+      // Sync to Firestore for all users/sessions
+      try {
+        const devDocRef = doc(db, "users", userId, "devices", thisDeviceId);
+        await setDoc(devDocRef, thisDev, { merge: true });
+      } catch (e) {
+        // Silent catch for offline
       }
     };
 
@@ -134,25 +165,10 @@ export function useSpotifyConnect({
     return () => {
       clearInterval(interval);
     };
-  }, [userId, thisDeviceId, deviceName, deviceType, volume, user]);
+  }, [userId, thisDeviceId, deviceName, deviceType, volume]);
 
   // 3. Listen to all online devices in Firestore
   useEffect(() => {
-    if (!user || user.isGuest) {
-      // For guests, maintain at least this device in list
-      setOnlineDevices([
-        {
-          id: thisDeviceId,
-          name: deviceName,
-          type: deviceType,
-          lastActive: Date.now(),
-          isThisDevice: true,
-          volume
-        }
-      ]);
-      return;
-    }
-
     const devicesColRef = collection(db, "users", userId, "devices");
     const unsub = onSnapshot(devicesColRef, (snap) => {
       const now = Date.now();
@@ -187,74 +203,7 @@ export function useSpotifyConnect({
     });
 
     return () => unsub();
-  }, [userId, thisDeviceId, deviceName, deviceType, volume, user]);
-
-  // 4. Listen to Playback State & Commands from Firestore
-  useEffect(() => {
-    if (!user || user.isGuest) return;
-
-    const playbackDocRef = doc(db, "users", userId, "playback", "current");
-    const unsub = onSnapshot(playbackDocRef, (snap) => {
-      if (snap.exists()) {
-        const data = snap.data() as SpotifyConnectPlayback;
-        setRemotePlayback(data);
-
-        if (data.activeDeviceId && data.activeDeviceId !== activeDeviceId) {
-          setActiveDeviceId(data.activeDeviceId);
-        }
-
-        // Process remote commands directed to THIS device
-        if (data.lastCommand && data.lastCommand.targetDeviceId === thisDeviceId) {
-          if (data.lastCommand.id !== lastProcessedCommandId.current) {
-            lastProcessedCommandId.current = data.lastCommand.id;
-            executeCommandLocally(data.lastCommand);
-          }
-        }
-      }
-    }, (err) => {
-      // Fallback
-    });
-
-    return () => unsub();
-  }, [userId, thisDeviceId, activeDeviceId, user]);
-
-  // 5. Sync active playback state to Firestore when THIS device is active
-  useEffect(() => {
-    if (!isThisDeviceActive) return;
-
-    const syncState = async () => {
-      const playbackData: SpotifyConnectPlayback = {
-        activeDeviceId: thisDeviceId,
-        activeDeviceName: deviceName,
-        activeDeviceType: deviceType,
-        currentTrack,
-        isPlaying,
-        progressMs: Math.floor(currentTime * 1000),
-        durationMs: Math.floor(duration * 1000),
-        volume,
-        updatedAt: Date.now()
-      };
-
-      // Broadcast locally
-      if (broadcastChannelRef.current) {
-        broadcastChannelRef.current.postMessage({ type: "PLAYBACK_UPDATE", playback: playbackData });
-      }
-
-      // Sync to Firestore
-      if (user && !user.isGuest) {
-        try {
-          const playbackDocRef = doc(db, "users", userId, "playback", "current");
-          await setDoc(playbackDocRef, playbackData, { merge: true });
-        } catch (e) {
-          // Ignore
-        }
-      }
-    };
-
-    // Throttle sync
-    const timer = setTimeout(syncState, 500);
-    return () => clearTimeout(timer);
-  }, [isThisDeviceActive, thisDeviceId, deviceName, deviceType, currentTrack, isPlaying, Math.floor(currentTime), Math.floor(duration), volume, userId, user]);
+  }, [userId, thisDeviceId, deviceName, deviceType, volume]);
 
   // Execute incoming remote command on THIS device
   const executeCommandLocally = useCallback((cmd: RemoteCommand) => {
@@ -294,6 +243,71 @@ export function useSpotifyConnect({
     }
   }, [setIsPlaying, onNextTrack, onPrevTrack, onSeek, playTrack, setVolume]);
 
+  // 4. Listen to Playback State & Commands from Firestore
+  useEffect(() => {
+    const playbackDocRef = doc(db, "users", userId, "playback", "current");
+    const unsub = onSnapshot(playbackDocRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data() as SpotifyConnectPlayback;
+        setRemotePlayback(data);
+
+        if (data.activeDeviceId && data.activeDeviceId !== activeDeviceId) {
+          setActiveDeviceId(data.activeDeviceId);
+        }
+
+        // Process remote commands directed to THIS device (or active player)
+        if (data.lastCommand) {
+          const cmd = data.lastCommand;
+          const isForThisDevice = cmd.targetDeviceId === thisDeviceId || (isThisDeviceActive && cmd.senderDeviceId !== thisDeviceId);
+          if (isForThisDevice && cmd.id !== lastProcessedCommandId.current) {
+            lastProcessedCommandId.current = cmd.id;
+            executeCommandLocally(cmd);
+          }
+        }
+      }
+    }, (err) => {
+      // Fallback
+    });
+
+    return () => unsub();
+  }, [userId, thisDeviceId, activeDeviceId, isThisDeviceActive, executeCommandLocally]);
+
+  // 5. Sync active playback state to Firestore when THIS device is active
+  useEffect(() => {
+    if (!isThisDeviceActive) return;
+
+    const syncState = async () => {
+      const playbackData: SpotifyConnectPlayback = {
+        activeDeviceId: thisDeviceId,
+        activeDeviceName: deviceName,
+        activeDeviceType: deviceType,
+        currentTrack,
+        isPlaying,
+        progressMs: Math.floor(currentTime * 1000),
+        durationMs: Math.floor(duration * 1000),
+        volume,
+        updatedAt: Date.now()
+      };
+
+      // Broadcast locally
+      if (broadcastChannelRef.current) {
+        broadcastChannelRef.current.postMessage({ type: "PLAYBACK_UPDATE", playback: playbackData });
+      }
+
+      // Sync to Firestore for real-time cross-device sync
+      try {
+        const playbackDocRef = doc(db, "users", userId, "playback", "current");
+        await setDoc(playbackDocRef, playbackData, { merge: true });
+      } catch (e) {
+        // Ignore
+      }
+    };
+
+    // Throttle sync
+    const timer = setTimeout(syncState, 500);
+    return () => clearTimeout(timer);
+  }, [isThisDeviceActive, thisDeviceId, deviceName, deviceType, currentTrack, isPlaying, Math.floor(currentTime), Math.floor(duration), volume, userId]);
+
   // Send remote command to active device
   const sendRemoteCommand = useCallback(async (
     type: RemoteCommand["type"],
@@ -314,19 +328,17 @@ export function useSpotifyConnect({
       broadcastChannelRef.current.postMessage({ type: "COMMAND", command });
     }
 
-    // Sync to Firestore
-    if (user && !user.isGuest) {
-      try {
-        const playbackDocRef = doc(db, "users", userId, "playback", "current");
-        await setDoc(playbackDocRef, {
-          lastCommand: command,
-          updatedAt: Date.now()
-        }, { merge: true });
-      } catch (e) {
-        console.error("Error sending remote command:", e);
-      }
+    // Sync to Firestore for cross-device control
+    try {
+      const playbackDocRef = doc(db, "users", userId, "playback", "current");
+      await setDoc(playbackDocRef, {
+        lastCommand: command,
+        updatedAt: Date.now()
+      }, { merge: true });
+    } catch (e) {
+      console.error("Error sending remote command:", e);
     }
-  }, [activeDeviceId, thisDeviceId, deviceName, userId, user]);
+  }, [activeDeviceId, thisDeviceId, deviceName, userId]);
 
   // Transfer playback to THIS device ("Écouter sur cet appareil")
   const transferPlaybackToThisDevice = useCallback(async () => {
@@ -346,6 +358,14 @@ export function useSpotifyConnect({
       if (broadcastChannelRef.current) {
         broadcastChannelRef.current.postMessage({ type: "COMMAND", command: stopCmd });
       }
+
+      try {
+        const playbackDocRef = doc(db, "users", userId, "playback", "current");
+        await setDoc(playbackDocRef, {
+          lastCommand: stopCmd,
+          updatedAt: Date.now()
+        }, { merge: true });
+      } catch (e) {}
     }
 
     // 2. Set this device as active
@@ -368,21 +388,19 @@ export function useSpotifyConnect({
     }
 
     // 4. Update Firestore
-    if (user && !user.isGuest) {
-      try {
-        const playbackDocRef = doc(db, "users", userId, "playback", "current");
-        await setDoc(playbackDocRef, {
-          activeDeviceId: thisDeviceId,
-          activeDeviceName: deviceName,
-          activeDeviceType: deviceType,
-          isPlaying: remotePlayback ? remotePlayback.isPlaying : isPlaying,
-          updatedAt: Date.now()
-        }, { merge: true });
-      } catch (e) {
-        console.error("Error transferring playback:", e);
-      }
+    try {
+      const playbackDocRef = doc(db, "users", userId, "playback", "current");
+      await setDoc(playbackDocRef, {
+        activeDeviceId: thisDeviceId,
+        activeDeviceName: deviceName,
+        activeDeviceType: deviceType,
+        isPlaying: remotePlayback ? remotePlayback.isPlaying : isPlaying,
+        updatedAt: Date.now()
+      }, { merge: true });
+    } catch (e) {
+      console.error("Error transferring playback:", e);
     }
-  }, [activeDeviceId, thisDeviceId, deviceName, deviceType, remotePlayback, setCurrentTrack, onSeek, setIsPlaying, userId, user]);
+  }, [activeDeviceId, thisDeviceId, deviceName, deviceType, remotePlayback, setCurrentTrack, onSeek, setIsPlaying, userId]);
 
   // Update custom device name
   const updateDeviceName = useCallback((newName: string) => {

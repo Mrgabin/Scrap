@@ -381,6 +381,32 @@ export default function YoutubePlayerBridge({
   };
 
   const [mobilePos, setMobilePos] = useState<"top-right" | "top-left" | "bottom-left">("top-right");
+  const touchStartYRef = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartYRef.current = e.touches[0].clientY;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartYRef.current === null) return;
+    const currentY = e.touches[0].clientY;
+    const deltaY = currentY - touchStartYRef.current;
+
+    // Drag down (> 40px) minimizes
+    if (deltaY > 40 && !minimized) {
+      setMinimized(true);
+      touchStartYRef.current = null;
+    }
+    // Drag up (< -40px) restores
+    else if (deltaY < -40 && minimized) {
+      setMinimized(false);
+      touchStartYRef.current = null;
+    }
+  };
+
+  const handleTouchEnd = () => {
+    touchStartYRef.current = null;
+  };
 
   const cycleMobilePos = () => {
     if (mobilePos === "top-right") setMobilePos("top-left");
@@ -393,7 +419,7 @@ export default function YoutubePlayerBridge({
       case "top-left":
         return "top-[calc(3.8rem+env(safe-area-inset-top,0px))] left-3 right-auto bottom-auto md:top-auto md:bottom-28 md:right-6 md:left-auto";
       case "bottom-left":
-        return "bottom-36 left-3 right-auto top-auto md:top-auto md:bottom-28 md:right-6 md:left-auto";
+        return "bottom-[calc(8.5rem+env(safe-area-inset-bottom,0px))] left-3 right-auto top-auto md:top-auto md:bottom-28 md:right-6 md:left-auto";
       case "top-right":
       default:
         return "top-[calc(3.8rem+env(safe-area-inset-top,0px))] right-3 left-auto bottom-auto md:top-auto md:bottom-28 md:right-6 md:left-auto";
@@ -413,7 +439,7 @@ export default function YoutubePlayerBridge({
 
   return (
     <div 
-      className={`fixed z-50 bg-[#181818] border ${
+      className={`fixed z-35 bg-[#181818] border ${
         isBlockedWhileMinimized 
           ? "border-[#1DB954] shadow-[0_0_25px_rgba(29,185,84,0.6)] animate-bounce" 
           : "border-neutral-800 shadow-2xl"
@@ -425,10 +451,13 @@ export default function YoutubePlayerBridge({
     >
       {/* Header bar */}
       <div 
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
         onClick={() => {
           if (minimized) setMinimized(false);
         }}
-        className={`flex items-center justify-between px-3 py-2 ${
+        className={`flex items-center justify-between px-3 py-2 cursor-grab active:cursor-grabbing ${
           isBlockedWhileMinimized ? "bg-[#1DB954] text-black cursor-pointer" : "bg-neutral-900 border-b border-neutral-800 text-neutral-200"
         }`}
       >

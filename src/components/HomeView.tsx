@@ -4,6 +4,7 @@ import { Track, Playlist } from "../types";
 import { CURATED_PLAYLISTS } from "../data/curatedPlaylists";
 import PlaylistCover from "./PlaylistCover";
 import { getDeterministicArtistAvatar } from "../lib/avatarHelper";
+import DJBanner from "./DJBanner";
 
 interface HomeViewProps {
   onPlayTrack: (track: Track, contextList?: Track[]) => void;
@@ -26,6 +27,14 @@ interface HomeViewProps {
   recommendationTimestamp?: number;
   user?: any;
   onSelectView?: (view: string) => void;
+  currentTrack?: Track | null;
+  
+  // DJ Engine Integration
+  djState?: any;
+  onStartDJSession?: () => void;
+  onChangeDJMood?: () => void;
+  onDJSoftReset?: () => void;
+  isDJLoading?: boolean;
 }
 
 export default function HomeView({
@@ -48,7 +57,13 @@ export default function HomeView({
   loadingPersonalized = false,
   recommendationTimestamp = 0,
   user = null,
-  onSelectView
+  onSelectView,
+  currentTrack = null,
+  djState,
+  onStartDJSession = () => {},
+  onChangeDJMood = () => {},
+  onDJSoftReset = () => {},
+  isDJLoading = false
 }: HomeViewProps) {
 
   // Active Filter state for mobile tab chips ("Tout", "Musique", etc.)
@@ -243,6 +258,22 @@ export default function HomeView({
           </button>
         </div>
       </div>
+
+      {/* DJ Banner Component */}
+      <DJBanner
+        isDJActive={djState?.isActive || false}
+        timeSlotName={djState?.timeSlotName || "Routine"}
+        timeSlotDesc={djState?.timeSlotDesc || ""}
+        userHour={djState?.userHour ?? new Date().getHours()}
+        currentTrack={currentTrack}
+        speechText={djState?.speechText || ""}
+        isSpeaking={djState?.isSpeaking || false}
+        consecutiveSkips={djState?.consecutiveSkips || 0}
+        onStartDJ={onStartDJSession}
+        onChangeMood={onChangeDJMood}
+        onSoftReset={onDJSoftReset}
+        isLoading={isDJLoading}
+      />
 
       {/* 1. Header Greeting & Quick Grid */}
       <div className="mb-8">

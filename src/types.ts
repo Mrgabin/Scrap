@@ -9,6 +9,20 @@ export interface Track {
   views?: string;
   isRecommendation?: boolean;
   addedAt?: string;
+  cadenceType?: "security" | "safe_discovery" | "bold_discovery"; // 3:1 Cadence classification
+  bpm?: number;
+  genre?: string;
+}
+
+export interface DJState {
+  isActive: boolean;
+  currentMood: string;
+  userHour: number;
+  timeSlotName: string;
+  consecutiveSkips: number;
+  speechText: string;
+  isSpeaking: boolean;
+  cadenceQueue: Track[];
 }
 
 export interface Playlist {
@@ -33,3 +47,4 @@ export interface HistoryItem {
   track: Track;
   timestamp: any; // Firestore Timestamp
 }
+

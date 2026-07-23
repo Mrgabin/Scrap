@@ -175,6 +175,21 @@ export default function Player({
                       <Sparkles className="w-2 h-2 fill-current" /> IA
                     </span>
                   )}
+                  {currentTrack.cadenceType === "security" && (
+                    <span className="bg-emerald-950/80 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider shrink-0" title="Règle 3:1 - Valeur Sûre">
+                      🔒 Sûre
+                    </span>
+                  )}
+                  {currentTrack.cadenceType === "safe_discovery" && (
+                    <span className="bg-sky-950/80 text-sky-400 border border-sky-500/30 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider shrink-0" title="Règle 3:1 - Découverte Sûre">
+                      ✨ Découverte
+                    </span>
+                  )}
+                  {currentTrack.cadenceType === "bold_discovery" && (
+                    <span className="bg-amber-950/80 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider shrink-0" title="Règle 3:1 - Découverte Audacieuse">
+                      🚀 Audacieuse
+                    </span>
+                  )}
                 </div>
                 <p 
                   onClick={() => onSelectArtist?.(currentTrack.artist)}

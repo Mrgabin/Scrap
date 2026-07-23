@@ -2287,6 +2287,390 @@ app.post("/api/recommendations", async (req, res) => {
   }
 });
 
+// Helper for Time of Day & BPM Weighting in DJ Recommendations
+function getTimeSlotConfig(userHour: number) {
+  const hour = typeof userHour === "number" && !isNaN(userHour) ? userHour : new Date().getHours();
+  if (hour >= 6 && hour < 9) {
+    return {
+      name: "Réveil / Routine",
+      desc: "Hitmix matinal dynamique pour bien démarrer la journée",
+      bpmMin: 110,
+      bpmMax: 130,
+      energyBoost: 0.3,
+      preferredGenres: ["pop", "rap", "electro"]
+    };
+  }
+  if (hour >= 9 && hour < 12) {
+    return {
+      name: "Travail / Focus",
+      desc: "Atmosphère fluide et concentrée pour vos projets",
+      bpmMin: 80,
+      bpmMax: 110,
+      energyBoost: -0.2,
+      preferredGenres: ["lofi", "pop", "rock"]
+    };
+  }
+  if (hour >= 12 && hour < 14) {
+    return {
+      name: "Pause Midi",
+      desc: "Sélection relaxante et rafraîchissante pour votre pause",
+      bpmMin: 90,
+      bpmMax: 115,
+      energyBoost: 0.0,
+      preferredGenres: ["pop", "lofi", "rock"]
+    };
+  }
+  if (hour >= 14 && hour < 18) {
+    return {
+      name: "Après-Midi / Boost",
+      desc: "Recharge d'énergie pour rythmer votre fin de journée",
+      bpmMin: 100,
+      bpmMax: 125,
+      energyBoost: 0.2,
+      preferredGenres: ["rap", "pop", "electro"]
+    };
+  }
+  if (hour >= 18 && hour < 22) {
+    return {
+      name: "Soirée / Chill",
+      desc: "Variété chaleureuse et envoûtante pour vous détendre",
+      bpmMin: 90,
+      bpmMax: 120,
+      energyBoost: 0.1,
+      preferredGenres: ["electro", "rap", "rock", "pop"]
+    };
+  }
+  return {
+    name: "Nuit / Ambient",
+    desc: "Sons doux, mélodiques et feutrés pour la nuit",
+    bpmMin: 60,
+    bpmMax: 95,
+    energyBoost: -0.4,
+    preferredGenres: ["lofi", "pop", "rock"]
+  };
+}
+
+// BPM Half-Time / Double-Time Harmonic Matcher (±15% Tolerance)
+function isBpmCompatible(candBpm: number, targetBpm: number): boolean {
+  if (!targetBpm || !candBpm) return true;
+  const tol = 0.15; // 15% tolerance
+  
+  // Standard range (1:1)
+  if (candBpm >= targetBpm * (1 - tol) && candBpm <= targetBpm * (1 + tol)) return true;
+  // Half-Time range (e.g. 140 BPM <-> 70 BPM)
+  const half = targetBpm / 2;
+  if (candBpm >= half * (1 - tol) && candBpm <= half * (1 + tol)) return true;
+  // Double-Time range (e.g. 70 BPM <-> 140 BPM)
+  const doubleBpm = targetBpm * 2;
+  if (candBpm >= doubleBpm * (1 - tol) && candBpm <= doubleBpm * (1 + tol)) return true;
+
+  return false;
+}
+
+// 3.5 AI DJ Recommendations Endpoint (Supports 3:1 Cadence, Time-of-day Weighting & Soft Reset)
+app.post("/api/dj/recommendations", async (req, res) => {
+  try {
+    const { 
+      history = [], 
+      likes = [], 
+      tasteScores, 
+      currentTrack, 
+      userHour, 
+      consecutiveSkips = 0,
+      mode = "normal", // "normal" | "change_mood" | "soft_reset"
+      skippedTracks = []
+    } = req.body;
+
+    const currentHour = typeof userHour === "number" ? userHour : new Date().getHours();
+    const slotConfig = getTimeSlotConfig(currentHour);
+
+    console.log(`[AI DJ Engine] Mode: "${mode}", Hour: ${currentHour}h (${slotConfig.name}), FastSkips: ${consecutiveSkips}`);
+
+    // Track duplicate detector
+    const isPresent = (cand: { title: string; artist: string }) => {
+      const cTitle = (cand.title || "").toLowerCase().trim();
+      const cArtist = (cand.artist || "").toLowerCase().trim();
+      
+      const checkIn = (arr: any[]) => arr.some(t => {
+        if (!t) return false;
+        const tTitle = String(t.title || "").toLowerCase().trim();
+        const tArtist = String(t.artist || "").toLowerCase().trim();
+        return tTitle.includes(cTitle) || cTitle.includes(tTitle) || (tArtist === cArtist && tTitle === cTitle);
+      });
+
+      return checkIn(history) || checkIn(skippedTracks);
+    };
+
+    // A. Handle Soft Reset Mode (When user skips 3+ tracks rapidly under 10s)
+    if (consecutiveSkips >= 3 || mode === "soft_reset") {
+      console.log("[AI DJ Engine] 🚨 SOFT RESET TRIGGERED - Re-anchoring user with top liked favorites!");
+      let anchorPool = likes.length > 0 ? likes : history.length > 0 ? history : FALLBACK_TRACKS;
+      anchorPool = anchorPool.filter(t => t && t.title);
+      
+      const topAnchors = anchorPool.slice(0, 4).map(t => ({
+        ...t,
+        cadenceType: "security" as const,
+        isRecommendation: true
+      }));
+
+      return res.json({
+        queue: topAnchors,
+        mode: "soft_reset",
+        timeSlotName: slotConfig.name,
+        timeSlotDesc: slotConfig.desc,
+        message: "Soft Reset activé : Réancrage immédiat sur vos titres préférés."
+      });
+    }
+
+    // B. Build Candidates & Calculate Affinity Scores with Time-of-Day Multiplier
+    let allCandidates: { title: string; artist: string; approxBpm?: number }[] = [];
+    Object.keys(POPULAR_GENRE_TRACKS).forEach(g => {
+      POPULAR_GENRE_TRACKS[g].forEach(track => {
+        let approxBpm = 110;
+        if (g === "lofi") approxBpm = 85;
+        if (g === "rap") approxBpm = 130;
+        if (g === "electro") approxBpm = 124;
+        if (g === "rock") approxBpm = 115;
+        if (g === "pop") approxBpm = 118;
+        allCandidates.push({ ...track, approxBpm });
+      });
+    });
+
+    // Score candidates
+    const scoredCandidates = allCandidates
+      .filter(cand => !isPresent(cand))
+      .map(cand => {
+        const prof = backendAnalyzeTrack(cand.title, cand.artist);
+        
+        let score = 10;
+        if (tasteScores) {
+          score += (tasteScores.genres?.[prof.genre] ?? 5);
+          score += (tasteScores.artists?.[prof.artist] ?? 5);
+        }
+
+        // Time-of-Day Multiplier
+        let timeMultiplier = 1.0;
+        if (slotConfig.preferredGenres.includes(prof.genre)) {
+          timeMultiplier += 0.35; // +35% boost for time-appropriate genres
+        }
+        
+        // Energy/BPM alignment
+        const candBpm = cand.approxBpm || 110;
+        if (candBpm >= slotConfig.bpmMin && candBpm <= slotConfig.bpmMax) {
+          timeMultiplier += 0.2;
+        }
+
+        // Current track BPM transition alignment (±15% / Half-Time / Double-Time)
+        if (currentTrack && currentTrack.bpm) {
+          if (isBpmCompatible(candBpm, currentTrack.bpm)) {
+            timeMultiplier += 0.25;
+          } else {
+            timeMultiplier -= 0.15;
+          }
+        }
+
+        // Mode: Change Mood (Pick alternate axis)
+        if (mode === "change_mood" && prof.genre !== (currentTrack?.genre || "pop")) {
+          timeMultiplier += 0.5;
+        }
+
+        const finalScore = score * Math.max(0.2, timeMultiplier) + (Math.random() * 2);
+        return { cand, prof, finalScore, approxBpm: cand.approxBpm };
+      });
+
+    scoredCandidates.sort((a, b) => b.finalScore - a.finalScore);
+
+    // C. Segregate Candidates for the 3:1 Cadence Rule
+    // 1 & 2: Security (Liked / Frequent)
+    const securityPool: any[] = [];
+    if (likes.length > 0) {
+      likes.forEach(t => {
+        if (!isPresent(t)) securityPool.push({ title: t.title, artist: t.artist });
+      });
+    }
+    if (securityPool.length < 4) {
+      history.slice(0, 10).forEach(t => {
+        if (!isPresent(t) && !securityPool.some(s => s.title === t.title)) {
+          securityPool.push({ title: t.title, artist: t.artist });
+        }
+      });
+    }
+
+    // Safe Discovery: Same genre as user preference, unplayed
+    const safeDiscoveryPool = scoredCandidates.filter(sc => 
+      !securityPool.some(sec => sec.title === sc.cand.title)
+    );
+
+    // Bold Discovery: Slightly adjacent style / different genre to explore
+    const primaryGenre = safeDiscoveryPool[0]?.prof.genre || "pop";
+    const boldDiscoveryPool = scoredCandidates.filter(sc => 
+      sc.prof.genre !== primaryGenre && !securityPool.some(sec => sec.title === sc.cand.title)
+    );
+
+    // D. Assemble Cadence Queue (2 Security : 1 Safe Discovery : 1 Bold Discovery)
+    const rawCadenceList: { title: string; artist: string; cadenceType: "security" | "safe_discovery" | "bold_discovery"; bpm?: number; genre?: string }[] = [];
+
+    let secIdx = 0;
+    let safeIdx = 0;
+    let boldIdx = 0;
+
+    for (let cycle = 0; cycle < 2; cycle++) { // 2 cycles = 8 tracks
+      // 1. Security #1
+      const sec1 = securityPool[secIdx % Math.max(1, securityPool.length)] || FALLBACK_TRACKS[cycle % FALLBACK_TRACKS.length];
+      rawCadenceList.push({ title: sec1.title, artist: sec1.artist, cadenceType: "security" });
+      secIdx++;
+
+      // 2. Security #2
+      const sec2 = securityPool[secIdx % Math.max(1, securityPool.length)] || FALLBACK_TRACKS[(cycle + 3) % FALLBACK_TRACKS.length];
+      rawCadenceList.push({ title: sec2.title, artist: sec2.artist, cadenceType: "security" });
+      secIdx++;
+
+      // 3. Safe Discovery
+      const safe = safeDiscoveryPool[safeIdx % Math.max(1, safeDiscoveryPool.length)]?.cand || FALLBACK_TRACKS[(cycle + 1) % FALLBACK_TRACKS.length];
+      rawCadenceList.push({ 
+        title: safe.title, 
+        artist: safe.artist, 
+        cadenceType: "safe_discovery",
+        bpm: safeDiscoveryPool[safeIdx % Math.max(1, safeDiscoveryPool.length)]?.approxBpm || 110,
+        genre: safeDiscoveryPool[safeIdx % Math.max(1, safeDiscoveryPool.length)]?.prof.genre
+      });
+      safeIdx++;
+
+      // 4. Bold Discovery
+      const bold = boldDiscoveryPool[boldIdx % Math.max(1, boldDiscoveryPool.length)]?.cand || FALLBACK_TRACKS[(cycle + 2) % FALLBACK_TRACKS.length];
+      rawCadenceList.push({ 
+        title: bold.title, 
+        artist: bold.artist, 
+        cadenceType: "bold_discovery",
+        bpm: boldDiscoveryPool[boldIdx % Math.max(1, boldDiscoveryPool.length)]?.approxBpm || 120,
+        genre: boldDiscoveryPool[boldIdx % Math.max(1, boldDiscoveryPool.length)]?.prof.genre
+      });
+      boldIdx++;
+    }
+
+    // E. Resolve tracks playable YouTube IDs
+    const resolvedTracks = await Promise.all(
+      rawCadenceList.map(async (item) => {
+        const cleanTitle = item.title.toLowerCase().trim();
+        const cleanArtist = item.artist.toLowerCase().trim();
+        
+        const localMatch = FALLBACK_TRACKS.find(t => 
+          t.title.toLowerCase().trim() === cleanTitle ||
+          t.artist.toLowerCase().trim() === cleanArtist ||
+          cleanTitle.includes(t.title.toLowerCase().trim())
+        );
+
+        if (localMatch) {
+          return {
+            ...localMatch,
+            title: item.title,
+            artist: item.artist,
+            cadenceType: item.cadenceType,
+            bpm: item.bpm || 115,
+            genre: item.genre || "pop",
+            isRecommendation: true
+          };
+        }
+
+        try {
+          const results = await searchYouTube(`${item.title} ${item.artist} audio`, 1);
+          if (results && results[0]) {
+            return {
+              ...results[0],
+              cadenceType: item.cadenceType,
+              bpm: item.bpm || 115,
+              genre: item.genre || "pop",
+              isRecommendation: true
+            };
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        return {
+          id: "fHI8X4OXluQ",
+          title: item.title,
+          artist: item.artist,
+          duration: "3:30",
+          durationSec: 210,
+          thumbnail: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=60",
+          cadenceType: item.cadenceType,
+          bpm: item.bpm || 115,
+          genre: item.genre || "pop",
+          isRecommendation: true
+        };
+      })
+    );
+
+    res.json({
+      queue: resolvedTracks.filter(Boolean),
+      mode,
+      timeSlotName: slotConfig.name,
+      timeSlotDesc: slotConfig.desc,
+      userHour: currentHour
+    });
+
+  } catch (error) {
+    console.error("AI DJ Recommendation Exception:", error);
+    res.status(500).json({ error: "Échec de génération du flux DJ" });
+  }
+});
+
+// 3.6 AI DJ Voice / Speech Generation Endpoint (Gemini 2.5 Flash + Fast Timeout Fallback)
+app.post("/api/dj/speak", async (req, res) => {
+  try {
+    const { nextTrack, currentTrack, userHour, timeSlotName, mode } = req.body;
+    const hour = typeof userHour === "number" ? userHour : new Date().getHours();
+    const slot = timeSlotName || getTimeSlotConfig(hour).name;
+
+    const nextTitle = nextTrack?.title || "ce morceau";
+    const nextArtist = nextTrack?.artist || "l'artiste";
+
+    // Instant static fallback if Gemini is slow or unavailable
+    const fallbackLines = [
+      `C'est l'heure de ${slot}. On enchaîne directement avec ${nextTitle} de ${nextArtist} !`,
+      `Changement d'ambiance ! Voici ${nextTitle} signé ${nextArtist}.`,
+      `On poursuit sur Scrap DJ : place à ${nextTitle} de ${nextArtist}.`,
+      `Session ${slot} : découvrez ${nextTitle} de ${nextArtist} !`
+    ];
+
+    const staticFallback = fallbackLines[Math.floor(Math.random() * fallbackLines.length)];
+
+    const ai = getGemini();
+    if (!ai) {
+      return res.json({ text: staticFallback, fallback: true });
+    }
+
+    // Call Gemini with a tight timeout to guarantee <800ms response
+    const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 850));
+
+    const prompt = `Tu es Scrap DJ, un animateur radio de streaming musical moderne, dynamique, chaleureux et complice (style Spotify DJ). 
+Rédige une intervention TRÈS COURTE (EXACTEMENT entre 12 et 20 mots) en français.
+Contexte : Créneau '${slot}', transition vers le morceau '${nextTitle}' de '${nextArtist}'. Mode: '${mode || "normal"}'.
+Important : Sois naturel, punchy, sans fioritures. Réponds uniquement avec le texte parlé de l'intervention.`;
+
+    const aiCall = ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+    }).catch(err => {
+      handleGeminiError(err);
+      return null;
+    });
+
+    const result: any = await Promise.race([aiCall, timeoutPromise]);
+
+    if (result && result.text) {
+      const cleanText = result.text.trim().replace(/^["']|["']$/g, '');
+      return res.json({ text: cleanText, fallback: false });
+    } else {
+      return res.json({ text: staticFallback, fallback: true });
+    }
+  } catch (err) {
+    console.error("DJ Speak error:", err);
+    res.json({ text: "On enchaîne avec le morceau suivant !", fallback: true });
+  }
+});
+
 // 4. Algorithmic Mix Generator Endpoint
 app.post("/api/generate-mixes", async (req, res) => {
   const { genres = [], moods = [], tempo = "", epochs = [], history = [] } = req.body;

@@ -43,6 +43,7 @@ import QuantumCoreBackground from "./components/QuantumCoreBackground";
 import { useTranslation } from "./lib/LanguageContext";
 import { getDeterministicArtistAvatar, fetchArtistAvatarClient } from "./lib/avatarHelper";
 import { analyzeTrackMetadata } from "./lib/profiler";
+import { useDJEngine } from "./hooks/useDJEngine";
 
 import { 
   Sparkles, 
@@ -1144,6 +1145,34 @@ export default function App() {
     }
   };
 
+  // 4.6. Initialize AI DJ Engine
+  const {
+    djState,
+    isLoading: isDJLoading,
+    startDJSession,
+    changeMood: onChangeDJMood,
+    softReset: onDJSoftReset,
+    handleSkipEvent
+  } = useDJEngine({
+    user,
+    likedTracks,
+    recentTracks,
+    tasteScores,
+    currentTrack,
+    currentTime,
+    duration,
+    onPlayQueueReplace: (tracks: Track[]) => {
+      setPlayQueue(tracks);
+      setQueueIndex(0);
+      if (tracks.length > 0) {
+        handlePlayTrack(tracks[0], tracks);
+      }
+    },
+    onNextTrack: () => {
+      handleNextTrack();
+    }
+  });
+
   // 4.5. Monitor Taste Survey status
   useEffect(() => {
     const localDismissed = localStorage.getItem("scrap_taste_survey_dismissed") === "true";
@@ -1481,6 +1510,11 @@ export default function App() {
   };
 
   const handleNextTrack = () => {
+    // Notify DJ Engine of skip event (checks if <10s)
+    if (typeof handleSkipEvent === "function") {
+      handleSkipEvent(currentTime);
+    }
+
     if (spotifyConnect?.isRemoteControlMode) {
       spotifyConnect.sendRemoteCommand("next");
       return;
@@ -3068,6 +3102,12 @@ export default function App() {
                 recommendationTimestamp={recommendationTimestamp}
                 user={user}
                 onSelectView={setCurrentView}
+                currentTrack={currentTrack}
+                djState={djState}
+                onStartDJSession={startDJSession}
+                onChangeDJMood={onChangeDJMood}
+                onDJSoftReset={onDJSoftReset}
+                isDJLoading={isDJLoading}
               />
             )}
 

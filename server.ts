@@ -2616,7 +2616,69 @@ app.post("/api/dj/recommendations", async (req, res) => {
   }
 });
 
-// 3.6 AI DJ Voice / Speech Generation Endpoint (Gemini 2.5 Flash + Fast Timeout Fallback)
+// 3.6 AI DJ Voice / Speech Generation Endpoint (Deterministic Audio Engine + Gemini 2.5 Flash Fallback)
+function generateDeterministicSpeech(
+  nextTitle: string,
+  nextArtist: string,
+  slot: string,
+  cadenceType?: string,
+  mode?: string
+): string {
+  if (mode === "soft_reset") {
+    const resetLines = [
+      `Soft Reset activé : retour immédiat aux valeurs sûres avec ${nextTitle} de ${nextArtist}.`,
+      `On se recentre sur vos titres incontournables : place à ${nextTitle} signé ${nextArtist}.`,
+      `Ré-ancrage de la session : écoutez ${nextTitle} par ${nextArtist} pour retrouver la vibe.`
+    ];
+    return resetLines[Math.floor(Math.random() * resetLines.length)];
+  }
+
+  if (mode === "change_mood") {
+    const moodLines = [
+      `Nouveau souffle pour votre session ${slot} : découvrez ${nextTitle} par ${nextArtist} !`,
+      `Changement d'ambiance à la demande : on bascule sur ${nextTitle} de ${nextArtist}.`,
+      `Virage musical contrôlé ! Place à ${nextTitle} signé ${nextArtist}.`
+    ];
+    return moodLines[Math.floor(Math.random() * moodLines.length)];
+  }
+
+  if (cadenceType === "security") {
+    const secLines = [
+      `Session ${slot} : un incontournable de votre bibliothèque, ${nextTitle} de ${nextArtist}.`,
+      `Valeur sûre au programme : on enchaîne avec le classique ${nextTitle} par ${nextArtist}.`,
+      `On reste en zone de confort pour ${slot} avec ${nextTitle} de ${nextArtist}.`
+    ];
+    return secLines[Math.floor(Math.random() * secLines.length)];
+  }
+
+  if (cadenceType === "safe_discovery") {
+    const safeLines = [
+      `En pleine harmonie avec vos goûts du moment : découvrez ${nextTitle} de ${nextArtist}.`,
+      `Pépite soigneusement sélectionnée pour votre pause ${slot} : ${nextTitle} par ${nextArtist}.`,
+      `On développe le fil musical avec cette trouvaille : ${nextTitle} signé ${nextArtist}.`
+    ];
+    return safeLines[Math.floor(Math.random() * safeLines.length)];
+  }
+
+  if (cadenceType === "bold_discovery") {
+    const boldLines = [
+      `BPM et fréquence ajustés pour cette découverte audacieuse : ${nextTitle} de ${nextArtist} !`,
+      `Osez l'exploration ! Voici une pépite qui bouscule le mix : ${nextTitle} par ${nextArtist}.`,
+      `Nouvelle texture sonore au tempo : ${nextTitle} de ${nextArtist}.`
+    ];
+    return boldLines[Math.floor(Math.random() * boldLines.length)];
+  }
+
+  // Generic natural fallback
+  const genericLines = [
+    `C'est l'heure de ${slot}. On enchaîne directement avec ${nextTitle} de ${nextArtist} !`,
+    `Changement d'ambiance ! Voici ${nextTitle} signé ${nextArtist}.`,
+    `On poursuit sur Scrap DJ : place à ${nextTitle} de ${nextArtist}.`,
+    `Session ${slot} : découvrez ${nextTitle} de ${nextArtist} !`
+  ];
+  return genericLines[Math.floor(Math.random() * genericLines.length)];
+}
+
 app.post("/api/dj/speak", async (req, res) => {
   try {
     const { nextTrack, currentTrack, userHour, timeSlotName, mode } = req.body;
@@ -2625,28 +2687,22 @@ app.post("/api/dj/speak", async (req, res) => {
 
     const nextTitle = nextTrack?.title || "ce morceau";
     const nextArtist = nextTrack?.artist || "l'artiste";
+    const cadenceType = nextTrack?.cadenceType;
 
-    // Instant static fallback if Gemini is slow or unavailable
-    const fallbackLines = [
-      `C'est l'heure de ${slot}. On enchaîne directement avec ${nextTitle} de ${nextArtist} !`,
-      `Changement d'ambiance ! Voici ${nextTitle} signé ${nextArtist}.`,
-      `On poursuit sur Scrap DJ : place à ${nextTitle} de ${nextArtist}.`,
-      `Session ${slot} : découvrez ${nextTitle} de ${nextArtist} !`
-    ];
-
-    const staticFallback = fallbackLines[Math.floor(Math.random() * fallbackLines.length)];
+    // Instant deterministic speech synthesis (0ms latency, zero API quota)
+    const deterministicText = generateDeterministicSpeech(nextTitle, nextArtist, slot, cadenceType, mode);
 
     const ai = getGemini();
     if (!ai) {
-      return res.json({ text: staticFallback, fallback: true });
+      return res.json({ text: deterministicText, fallback: true, mode: "deterministic_dsp" });
     }
 
-    // Call Gemini with a tight timeout to guarantee <800ms response
+    // Call Gemini with a tight timeout (<850ms) to ensure seamless transition
     const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 850));
 
     const prompt = `Tu es Scrap DJ, un animateur radio de streaming musical moderne, dynamique, chaleureux et complice (style Spotify DJ). 
 Rédige une intervention TRÈS COURTE (EXACTEMENT entre 12 et 20 mots) en français.
-Contexte : Créneau '${slot}', transition vers le morceau '${nextTitle}' de '${nextArtist}'. Mode: '${mode || "normal"}'.
+Contexte : Créneau '${slot}', transition vers le morceau '${nextTitle}' de '${nextArtist}'. Cadence 3:1: '${cadenceType || "standard"}'. Mode: '${mode || "normal"}'.
 Important : Sois naturel, punchy, sans fioritures. Réponds uniquement avec le texte parlé de l'intervention.`;
 
     const aiCall = ai.models.generateContent({
@@ -2661,13 +2717,20 @@ Important : Sois naturel, punchy, sans fioritures. Réponds uniquement avec le t
 
     if (result && result.text) {
       const cleanText = result.text.trim().replace(/^["']|["']$/g, '');
-      return res.json({ text: cleanText, fallback: false });
+      return res.json({ text: cleanText, fallback: false, mode: "gemini" });
     } else {
-      return res.json({ text: staticFallback, fallback: true });
+      return res.json({ text: deterministicText, fallback: true, mode: "deterministic_dsp" });
     }
   } catch (err) {
-    console.error("DJ Speak error:", err);
-    res.json({ text: "On enchaîne avec le morceau suivant !", fallback: true });
+    handleGeminiError(err);
+    const fallbackText = generateDeterministicSpeech(
+      req.body?.nextTrack?.title || "ce morceau",
+      req.body?.nextTrack?.artist || "l'artiste",
+      req.body?.timeSlotName || "Routine",
+      req.body?.nextTrack?.cadenceType,
+      req.body?.mode
+    );
+    res.json({ text: fallbackText, fallback: true, mode: "deterministic_dsp" });
   }
 });
 

@@ -833,9 +833,17 @@ export default function App() {
         tracks.push(doc.data() as Track);
       });
       setLikedTracks(tracks);
+      try { localStorage.setItem(`scrap_cached_liked_${user.uid}`, JSON.stringify(tracks)); } catch(e){}
     }, (err) => {
-      console.error("Liked songs list failed:", err);
-      setFirestoreError(`Firestore: ${err.message}`);
+      console.warn("Liked songs listener warning:", err.message);
+      if (err?.code === "resource-exhausted" || err?.message?.includes("Quota exceeded") || err?.message?.includes("resource-exhausted")) {
+        try {
+          const cached = localStorage.getItem(`scrap_cached_liked_${user.uid}`);
+          if (cached) setLikedTracks(JSON.parse(cached));
+        } catch(e){}
+      } else {
+        setFirestoreError(`Firestore: ${err.message}`);
+      }
     });
 
     // B. Custom Playlists listener
@@ -846,9 +854,17 @@ export default function App() {
         lists.push({ id: doc.id, ...doc.data() } as Playlist);
       });
       setCustomPlaylists(lists);
+      try { localStorage.setItem(`scrap_cached_playlists_${user.uid}`, JSON.stringify(lists)); } catch(e){}
     }, (err) => {
-      console.error("Playlists list failed:", err);
-      setFirestoreError(`Firestore: ${err.message}`);
+      console.warn("Playlists listener warning:", err.message);
+      if (err?.code === "resource-exhausted" || err?.message?.includes("Quota exceeded") || err?.message?.includes("resource-exhausted")) {
+        try {
+          const cached = localStorage.getItem(`scrap_cached_playlists_${user.uid}`);
+          if (cached) setCustomPlaylists(JSON.parse(cached));
+        } catch(e){}
+      } else {
+        setFirestoreError(`Firestore: ${err.message}`);
+      }
     });
 
     // C. Recent Listening History listener
@@ -872,11 +888,17 @@ export default function App() {
           uniqueRecent.push(track);
         }
       });
-      setRecentTracks(uniqueRecent.slice(0, 8));
+      const slice8 = uniqueRecent.slice(0, 8);
+      setRecentTracks(slice8);
+      try { localStorage.setItem(`scrap_cached_history_${user.uid}`, JSON.stringify(slice8)); } catch(e){}
     }, (err) => {
-      console.error("Listening history list failed:", err);
-      // Suppress transient sorting index errors until index is built if needed
-      if (!err.message.includes("index")) {
+      console.warn("Listening history listener warning:", err.message);
+      if (err?.code === "resource-exhausted" || err?.message?.includes("Quota exceeded") || err?.message?.includes("resource-exhausted")) {
+        try {
+          const cached = localStorage.getItem(`scrap_cached_history_${user.uid}`);
+          if (cached) setRecentTracks(JSON.parse(cached));
+        } catch(e){}
+      } else if (!err.message.includes("index")) {
         setFirestoreError(`Firestore: ${err.message}`);
       }
     });
@@ -892,8 +914,15 @@ export default function App() {
         }
       });
       setFollowedArtists(artists);
+      try { localStorage.setItem(`scrap_cached_followed_${user.uid}`, JSON.stringify(artists)); } catch(e){}
     }, (err) => {
-      console.error("Followed artists list failed:", err);
+      console.warn("Followed artists listener warning:", err.message);
+      if (err?.code === "resource-exhausted" || err?.message?.includes("Quota exceeded") || err?.message?.includes("resource-exhausted")) {
+        try {
+          const cached = localStorage.getItem(`scrap_cached_followed_${user.uid}`);
+          if (cached) setFollowedArtists(JSON.parse(cached));
+        } catch(e){}
+      }
     });
 
     // E. User Taste Profile listener
@@ -941,7 +970,7 @@ export default function App() {
         setSpotifyClientSecret("");
       }
     }, (err) => {
-      console.error("User document snapshot failed:", err);
+      console.warn("User doc listener warning:", err.message);
     });
 
     // F. Algorithmic Playlists listener
@@ -953,8 +982,15 @@ export default function App() {
       });
       lists.sort((a, b) => a.id.localeCompare(b.id));
       setPersonalizedPlaylists(lists);
+      try { localStorage.setItem(`scrap_cached_personalized_${user.uid}`, JSON.stringify(lists)); } catch(e){}
     }, (err) => {
-      console.error("Personalized playlists loading failed:", err);
+      console.warn("Personalized playlists listener warning:", err.message);
+      if (err?.code === "resource-exhausted" || err?.message?.includes("Quota exceeded") || err?.message?.includes("resource-exhausted")) {
+        try {
+          const cached = localStorage.getItem(`scrap_cached_personalized_${user.uid}`);
+          if (cached) setPersonalizedPlaylists(JSON.parse(cached));
+        } catch(e){}
+      }
     });
 
     // G. Search History listener (Firestore Database)
@@ -975,7 +1011,16 @@ export default function App() {
         localStorage.setItem(key, JSON.stringify(items));
       }
     }, (err) => {
-      console.error("Search history Firestore listener failed:", err);
+      console.warn("Search history listener warning:", err.message);
+      if (err?.code === "resource-exhausted" || err?.message?.includes("Quota exceeded") || err?.message?.includes("resource-exhausted")) {
+        const key = getSearchHistoryKey(user);
+        if (key) {
+          try {
+            const cached = localStorage.getItem(key);
+            if (cached) setSearchHistory(JSON.parse(cached));
+          } catch(e){}
+        }
+      }
     });
 
     return () => {
@@ -1266,9 +1311,9 @@ export default function App() {
     let contextType: 'liked' | 'playlist' | 'artist' | 'album' | null = null;
     if (currentView === "liked-songs") {
       contextType = "liked";
-    } else if (currentView.startsWith("playlist-")) {
+    } else if (typeof currentView === "string" && currentView.startsWith("playlist-")) {
       contextType = "playlist";
-    } else if (currentView.startsWith("artist-")) {
+    } else if (typeof currentView === "string" && currentView.startsWith("artist-")) {
       contextType = "artist";
     } else if (contextList.length > 0 && likedTracks.length > 0 && contextList[0].id === likedTracks[0].id) {
       contextType = "liked";
@@ -1313,15 +1358,17 @@ export default function App() {
           timestamp: new Date().toISOString()
         });
       } catch (err: any) {
-        console.error("Error logging history:", err);
-        setFirestoreError(`Erreur historique: ${err.message}`);
+        console.warn("Error logging history:", err.message);
+        if (!err?.message?.includes("Quota exceeded") && err?.code !== "resource-exhausted") {
+          setFirestoreError(`Erreur historique: ${err.message}`);
+        }
       }
     }
   };
 
   // Dynamic resolution of YouTube Track IDs on-the-fly when playing
   useEffect(() => {
-    if (!currentTrack || !currentTrack.id.startsWith("resolve:")) return;
+    if (!currentTrack || !currentTrack.id || typeof currentTrack.id !== "string" || !currentTrack.id.startsWith("resolve:")) return;
 
     let active = true;
 
@@ -1390,14 +1437,16 @@ export default function App() {
     // 1. Optimistic UI update with smart deduplication
     setSearchHistory((prevHistory) => {
       const filtered = prevHistory.filter((h) => {
+        if (!h) return false;
+        const itemTitle = (item?.name || "").toLowerCase().trim();
+        const hTitle = (h?.name || "").toLowerCase().trim();
+        
         // Direct ID or exact name match
-        if (h.id === item.id || h.name.toLowerCase() === item.name.toLowerCase()) return false;
+        if ((item.id && h.id && h.id === item.id) || (itemTitle && hTitle && itemTitle === hTitle)) return false;
         
         // If adding a text query ("Recherche"), remove previous partial text queries that are prefixes/suffixes
-        if (item.type === "Recherche" && h.type === "Recherche") {
-          const newNameLower = item.name.toLowerCase().trim();
-          const oldNameLower = h.name.toLowerCase().trim();
-          if (newNameLower.startsWith(oldNameLower) || oldNameLower.startsWith(newNameLower)) {
+        if (item?.type === "Recherche" && h?.type === "Recherche") {
+          if (itemTitle && hTitle && (itemTitle.startsWith(hTitle) || hTitle.startsWith(itemTitle))) {
             return false;
           }
         }
@@ -2025,6 +2074,12 @@ export default function App() {
     }
 
     const isAlreadyLiked = likedTracks.some(t => t.id === currentTrack.id);
+    const updatedLiked = isAlreadyLiked
+      ? likedTracks.filter(t => t.id !== currentTrack.id)
+      : [...likedTracks, { ...currentTrack, addedAt: new Date().toISOString() }];
+    setLikedTracks(updatedLiked);
+    try { localStorage.setItem(`scrap_cached_liked_${user.uid}`, JSON.stringify(updatedLiked)); } catch(e){}
+
     const docRef = doc(db, "users", user.uid, "likedTracks", currentTrack.id);
     try {
       if (isAlreadyLiked) {
@@ -2036,8 +2091,10 @@ export default function App() {
         });
       }
     } catch (err: any) {
-      console.error("Failed to toggle like:", err);
-      setFirestoreError(`Erreur favoris: ${err.message}`);
+      console.warn("Failed to toggle like on Firestore:", err.message);
+      if (!err?.message?.includes("Quota exceeded") && err?.code !== "resource-exhausted") {
+        setFirestoreError(`Erreur favoris: ${err.message}`);
+      }
     }
   };
 
@@ -2050,6 +2107,12 @@ export default function App() {
     }
 
     const isAlreadyLiked = likedTracks.some(t => t.id === track.id);
+    const updatedLiked = isAlreadyLiked
+      ? likedTracks.filter(t => t.id !== track.id)
+      : [...likedTracks, { ...track, addedAt: new Date().toISOString() }];
+    setLikedTracks(updatedLiked);
+    try { localStorage.setItem(`scrap_cached_liked_${user.uid}`, JSON.stringify(updatedLiked)); } catch(e){}
+
     const docRef = doc(db, "users", user.uid, "likedTracks", track.id);
     try {
       if (isAlreadyLiked) {
@@ -2061,8 +2124,10 @@ export default function App() {
         });
       }
     } catch (err: any) {
-      console.error("Failed to toggle track like:", err);
-      setFirestoreError(`Erreur favoris: ${err.message}`);
+      console.warn("Failed to toggle track like on Firestore:", err.message);
+      if (!err?.message?.includes("Quota exceeded") && err?.code !== "resource-exhausted") {
+        setFirestoreError(`Erreur favoris: ${err.message}`);
+      }
     }
   };
 
@@ -3201,7 +3266,7 @@ export default function App() {
               />
             )}
 
-            {currentView.startsWith("playlist-") && selectedPlaylist && (
+            {typeof currentView === "string" && currentView.startsWith("playlist-") && selectedPlaylist && (
               <PlaylistView 
                 playlist={customPlaylists.find(p => p.id === selectedPlaylist.id) || selectedPlaylist}
                 likedTracks={likedTracks}
@@ -3217,7 +3282,7 @@ export default function App() {
               />
             )}
 
-            {currentView.startsWith("artist-") && (
+            {typeof currentView === "string" && currentView.startsWith("artist-") && (
               <ArtistView 
                 artistName={selectedArtistName}
                 onPlayTrack={handlePlayTrack}

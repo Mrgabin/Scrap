@@ -18,7 +18,7 @@ export default function MobileNav({
 }: MobileNavProps) {
   const isHome = currentView === "home";
   const isSearch = currentView === "search";
-  const isLibrary = currentView === "library" || currentView === "liked-songs" || currentView.startsWith("playlist-");
+  const isLibrary = currentView === "library" || currentView === "liked-songs" || (typeof currentView === "string" && currentView.startsWith("playlist-"));
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-[#090909] border-t border-white/5 px-2 pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom,0px))] flex justify-around items-center md:hidden select-none shadow-[0_-10px_25px_rgba(0,0,0,0.8)]">

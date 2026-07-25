@@ -160,7 +160,7 @@ export function useSpotifyConnect({
     };
 
     registerHeartbeat();
-    const interval = setInterval(registerHeartbeat, 5000);
+    const interval = setInterval(registerHeartbeat, 30000); // 30s heartbeat instead of 5s to save Firestore quota
 
     return () => {
       clearInterval(interval);
@@ -272,41 +272,45 @@ export function useSpotifyConnect({
     return () => unsub();
   }, [userId, thisDeviceId, activeDeviceId, isThisDeviceActive, executeCommandLocally]);
 
-  // 5. Sync active playback state to Firestore when THIS device is active
+  // 5. Sync active playback state to Firestore when THIS device is active (Throttled to avoid Quota Exceeded)
+  const lastSyncTimeRef = useRef<number>(0);
+
   useEffect(() => {
     if (!isThisDeviceActive) return;
 
-    const syncState = async () => {
-      const playbackData: SpotifyConnectPlayback = {
-        activeDeviceId: thisDeviceId,
-        activeDeviceName: deviceName,
-        activeDeviceType: deviceType,
-        currentTrack,
-        isPlaying,
-        progressMs: Math.floor(currentTime * 1000),
-        durationMs: Math.floor(duration * 1000),
-        volume,
-        updatedAt: Date.now()
-      };
-
-      // Broadcast locally
-      if (broadcastChannelRef.current) {
-        broadcastChannelRef.current.postMessage({ type: "PLAYBACK_UPDATE", playback: playbackData });
-      }
-
-      // Sync to Firestore for real-time cross-device sync
-      try {
-        const playbackDocRef = doc(db, "users", userId, "playback", "current");
-        await setDoc(playbackDocRef, playbackData, { merge: true });
-      } catch (e) {
-        // Ignore
-      }
+    const now = Date.now();
+    const playbackData: SpotifyConnectPlayback = {
+      activeDeviceId: thisDeviceId,
+      activeDeviceName: deviceName,
+      activeDeviceType: deviceType,
+      currentTrack: currentTrack || null,
+      isPlaying,
+      progressMs: Math.floor(currentTime * 1000),
+      durationMs: Math.floor(duration * 1000),
+      volume,
+      updatedAt: now
     };
 
-    // Throttle sync
-    const timer = setTimeout(syncState, 500);
-    return () => clearTimeout(timer);
-  }, [isThisDeviceActive, thisDeviceId, deviceName, deviceType, currentTrack, isPlaying, Math.floor(currentTime), Math.floor(duration), volume, userId]);
+    // Broadcast locally to tabs instantly via BroadcastChannel
+    if (broadcastChannelRef.current) {
+      broadcastChannelRef.current.postMessage({ type: "PLAYBACK_UPDATE", playback: playbackData });
+    }
+
+    // Sync to Firestore ONLY when track, play status, volume change OR every 20 seconds
+    const timeSinceLastSync = now - lastSyncTimeRef.current;
+    if (timeSinceLastSync >= 20000 || isPlaying !== remotePlayback?.isPlaying || currentTrack?.id !== remotePlayback?.currentTrack?.id) {
+      lastSyncTimeRef.current = now;
+      const syncState = async () => {
+        try {
+          const playbackDocRef = doc(db, "users", userId, "playback", "current");
+          await setDoc(playbackDocRef, playbackData, { merge: true });
+        } catch (e) {
+          // Silent catch for quota or offline
+        }
+      };
+      syncState();
+    }
+  }, [isThisDeviceActive, thisDeviceId, deviceName, deviceType, currentTrack?.id, isPlaying, volume, userId]);
 
   // Send remote command to active device
   const sendRemoteCommand = useCallback(async (
@@ -316,10 +320,10 @@ export function useSpotifyConnect({
     const command: RemoteCommand = {
       id: "cmd_" + Math.random().toString(36).substring(2, 9) + "_" + Date.now(),
       type,
-      targetDeviceId: activeDeviceId,
+      targetDeviceId: activeDeviceId || null,
       senderDeviceId: thisDeviceId,
       senderDeviceName: deviceName,
-      payload,
+      payload: payload ?? null,
       timestamp: Date.now()
     };
 
